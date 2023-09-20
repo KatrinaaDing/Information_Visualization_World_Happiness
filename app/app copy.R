@@ -1,32 +1,60 @@
-library('shiny')
-library('ggplot2')
-library('leaflet')
-library('ggiraph')
+library("shiny")
+library("ggplot2")
+library("leaflet")
+library("ggiraph")
+library(maptools)
+library(rgdal)
 library(dplyr)
 library(bslib)
 
-worldHappiness <- read.csv("/Users/katrinading/Desktop/Uni/postgrad/GEOM90007 iv/asst2/data/World Happiness Reports 2013-2023/WorldHappinessIndex2013-2023.csv")
+
+worldMap <- readOGR("/private/var/folders/rb/k_cp4hm14m30kkkpg55d22g00000gn/T/MicrosoftEdgeDownloads/3209d76e-b490-4d19-a1e6-b117132665b7/ref-countries-2020-60m.shp/CNTR_BN_60M_2020_3035.shp", "CNTR_BN_60M_2020_3035")
+worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappinessIndex2013-2023.csv")
 # worldHappiness <- worldHappiness[complete.cases(worldHappiness$Life.Ladder, worldHappiness$Year), ]
 # worldHappiness$Year <- as.numeric(as.character(worldHappiness$Year))
 # worldHappiness$Rank <- ave(worldHappiness$Life.Ladder, worldHappiness$Year, FUN = function(x) rank(-x))
 
 
+worldMapDf <- fortify(worldMap)
+
 ##################
 # USER INTERFACE #
 ##################
 
-
-rank_tab <- tabPanel(
-  title='Ranks',
-  h2('World Happiness Ranks'),
+map_tab <- tabPanel(
+  title = "Map",
+  h2("World Happiness Map"),
   sidebarLayout(
     sidebarPanel(
-      textInput("country_search", "Search for a country:", ""),
-      div(style = "height: 400px; overflow-y: scroll;",
-          checkboxGroupInput("country_select", "Choose a country:",
-            choices = sort(unique(worldHappiness$Country)),
-            selected = "Australia"
-          ))
+      sliderInput(
+        "timeline",
+        "Select Year",
+        min = 2013,
+        max = 2023,
+        value = 2023,
+        step = 1,
+        sep = ""
+      )
+    ),
+    mainPanel(
+      girafeOutput("map_happiness")
+    )
+  )
+)
+
+rank_tab <- tabPanel(
+  title = "Ranks",
+  h2("World Happiness Ranks"),
+  sidebarLayout(
+    sidebarPanel(
+      # textInput("country_search", "Search for a country:", ""),
+      div(
+        style = "height: 400px; overflow-y: scroll;",
+        checkboxGroupInput("country_select", "Choose a country:",
+          choices = sort(unique(worldHappiness$Country)),
+          selected = "Australia"
+        )
+      )
     ),
     mainPanel(
       girafeOutput("linePlot")
@@ -37,7 +65,8 @@ rank_tab <- tabPanel(
 ui <- navbarPage(
   title = "World Happiness Report",
   theme = bslib::bs_theme(bootswatch = "lumen"),
-  rank_tab
+  rank_tab,
+  map_tab
 )
 
 ##################
@@ -70,21 +99,44 @@ server <- function(input, output, session) {
     }
     filtered_data <- worldHappiness %>% filter(Country %in% input$country_select)
 
-    p <- ggplot(filtered_data, aes(x=Year, y=Rank, group=Country, color=Country)) +
+    p <- ggplot(filtered_data, aes(x = Year, y = Rank, group = Country, color = Country)) +
       theme_minimal() +
-      scale_x_continuous(breaks=2013:2023) +
-      geom_line_interactive(aes(group=Country)) +
+      scale_x_continuous(breaks = 2013:2023) +
+      geom_line_interactive(aes(group = Country)) +
       geom_point_interactive(size = 4, aes(tooltip = paste("Country:", Country, "<br>", "Year:", Year, "<br>", "Rank:", Rank))) +
       scale_y_continuous(limits = c(0, max(filtered_data$Rank))) +
       ggtitle(paste("World Happiness Rank of Countries Over Time")) +
       xlab("Year") +
       ylab("Rank")
 
-    girafe(ggobj=p)
-
+    girafe(ggobj = p)
   })
 
+  # output$map_happiness <- renderLeaflet({
+  #   leaflet() %>%
+  #     addProviderTiles(providers$CartoDB) %>%
+  #     # setView(lng = 0, lat = 0, zoom = 2) %>%
+  #     addMarkers(lng = 0, lat = 0, popup = "Hello World!")
+  # })
+
+  output$map_happiness <- renderGirafe({
+    p <- ggplot() +
+      geom_polygon_interactive(data = worldHappiness,
+          aes(x = Longitude,
+              y = Latitude,
+              group = Country,
+              fill = Life.Ladder,
+              tooltip = paste("Country:",
+                              Country, "<br>",
+                              "Happiness Score:", Life.Ladder))) +
+      scale_fill_gradient(low = "red", high = "green") 
+  })
 }
 
-# Run the application 
-shinyApp(ui = ui, server = server)
+# Run the application
+shinyApp(ui = ui, server = server
+# options = list(
+#   width = 1920,
+#   height = 1080
+# )
+)
