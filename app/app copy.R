@@ -6,16 +6,23 @@ library(maptools)
 library(rgdal)
 library(dplyr)
 library(bslib)
+library(maps)
+library(rnaturalearth)
+library(sf)
 
+# worldMap <- readOGR("/private/var/folders/rb/k_cp4hm14m30kkkpg55d22g00000gn/T/MicrosoftEdgeDownloads/3209d76e-b490-4d19-a1e6-b117132665b7/ref-countries-2020-60m.shp/CNTR_BN_60M_2020_3035.shp", "CNTR_BN_60M_2020_3035")
+worldMap <- ne_countries(scale = "medium", returnclass = "sf")
 
-worldMap <- readOGR("/private/var/folders/rb/k_cp4hm14m30kkkpg55d22g00000gn/T/MicrosoftEdgeDownloads/3209d76e-b490-4d19-a1e6-b117132665b7/ref-countries-2020-60m.shp/CNTR_BN_60M_2020_3035.shp", "CNTR_BN_60M_2020_3035")
+#worldMap <- st_read("../data/countries.geo.json")
 worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappinessIndex2013-2023.csv")
+
 # worldHappiness <- worldHappiness[complete.cases(worldHappiness$Life.Ladder, worldHappiness$Year), ]
 # worldHappiness$Year <- as.numeric(as.character(worldHappiness$Year))
 # worldHappiness$Rank <- ave(worldHappiness$Life.Ladder, worldHappiness$Year, FUN = function(x) rank(-x))
+worldMap <- st_transform(worldMap, 4326)
 
 
-worldMapDf <- fortify(worldMap)
+
 
 ##################
 # USER INTERFACE #
@@ -37,7 +44,7 @@ map_tab <- tabPanel(
       )
     ),
     mainPanel(
-      girafeOutput("map_happiness")
+      leafletOutput("map_happiness", height = 600)
     )
   )
 )
@@ -68,13 +75,6 @@ ui <- navbarPage(
   rank_tab,
   map_tab
 )
-
-##################
-# EVENT OBSERVER #
-##################
-
-
-
 
 ################
 # SHINY SERVER #
@@ -112,24 +112,31 @@ server <- function(input, output, session) {
     girafe(ggobj = p)
   })
 
-  # output$map_happiness <- renderLeaflet({
-  #   leaflet() %>%
-  #     addProviderTiles(providers$CartoDB) %>%
-  #     # setView(lng = 0, lat = 0, zoom = 2) %>%
-  #     addMarkers(lng = 0, lat = 0, popup = "Hello World!")
-  # })
+  output$map_happiness <- renderLeaflet({
+    joined_data <- left_join(worldMap, worldHappiness, by = c("name" = "Country"))
+    joined_data <- joined_data %>% filter(Year == input$timeline & !is.na(joined_data$Index))
 
-  output$map_happiness <- renderGirafe({
-    p <- ggplot() +
-      geom_polygon_interactive(data = worldHappiness,
-          aes(x = Longitude,
-              y = Latitude,
-              group = Country,
-              fill = Life.Ladder,
-              tooltip = paste("Country:",
-                              Country, "<br>",
-                              "Happiness Score:", Life.Ladder))) +
-      scale_fill_gradient(low = "red", high = "green") 
+    colors <- colorNumeric("Blues", joined_data$Index)
+    leaflet(joined_data) %>%
+      addProviderTiles(providers$CartoDB) %>%
+      setView(lng = 0, lat = 0, zoom = 2) %>%
+      addPolygons(
+                  fillColor = ~colors(Index),
+                  color = 'white',
+                  smoothFactor = 0.2,
+                  fillOpacity = 0.7,
+                  stroke = F,
+                  weight = 2,
+                  popup = ~paste("Country:", joined_data$name, "<br>", "Happiness Score:", joined_data$Index)) %>%
+      addLegend(
+        position = "bottomright",
+        pal = colors,
+        values = ~joined_data$Index,
+        bins = 14,
+
+        title = "Index of Happiness"
+      )
+
   })
 }
 
