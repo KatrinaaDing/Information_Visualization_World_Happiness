@@ -17,9 +17,9 @@ library(htmlwidgets)
 #########
 
 faceIcons <- iconList(
-  happy = makeIcon("icons/face-smile-regular.svg", "icons/face-smile-regular.svg", 24, 24),
-  natural = makeIcon("icons/face-meh-regular.svg", "icons/face-meh-regular.svg", 24, 24),
-  sad = makeIcon("icons/face-frown-regular.svg", "icons/face-frown-regular.svg", 24, 24)
+  happy = makeIcon("icons/face-smile-regular.svg", "icons/face-smile-regular.svg", 18, 18),
+  natural = makeIcon("icons/face-meh-regular.svg", "icons/face-meh-regular.svg", 18, 18),
+  sad = makeIcon("icons/face-frown-regular.svg", "icons/face-frown-regular.svg", 18, 18)
 )
 
 #########
@@ -65,23 +65,46 @@ dataWithSpatial$happiness <- ifelse(dataWithSpatial$Index > 5, "happy", ifelse(d
 
 map_tab <- tabPanel(
   title = "Map",
-  h2("World Happiness Map"),
-  sidebarLayout(
-    sidebarPanel(
-      sliderInput(
-        "timeline",
-        "Select Year",
-        min = 2013,
-        max = 2023,
-        value = 2023,
-        step = 1,
-        sep = ""
-      )
+  tags$head(
+    tags$style(HTML("
+      #controls-container{
+        position: absolute;
+        bottom: 5px;
+        left: 50%;
+        transform: scale(1.1) translate(-50%, -50%);
+      }
+      #controls-container .shiny-input-container {
+        background-color: rgba(255,255,255,0.5);
+        padding: 10px;
+        text-align: center;
+        margin-bottom: 0;
+
+      }
+      #controls-container #timeline-label {
+        width: 100%;
+        text-align: center;
+      }
+      #map_happiness {
+        height: calc(100vh - 100px) !important;
+      }
+    ")),
+  ),
+  leafletOutput("map_happiness", height = "100vh"),
+  # control panel
+  absolutePanel(
+    id = "controls-container",
+    sliderInput(
+      "timeline",
+      "Select Year",
+      min = 2013,
+      max = 2023,
+      value = 2023,
+      step = 1,
+      sep = ""
     ),
-    mainPanel(
-      leafletOutput("map_happiness", height = 600)
-    )
-  )
+    checkboxInput("clustering", "Enable clustering", value = TRUE)
+  ),
+  
 )
 
 rank_tab <- tabPanel(
@@ -127,6 +150,8 @@ server <- function(input, output, session) {
   #   updateCheckboxGroupInput(session, 'country', choices = filtered_data, selected = selected_countries)
   # })
 
+  
+
   output$linePlot <- renderGirafe({
     if (is.null(input$country_select)) {
       # If no data, display a warning
@@ -146,81 +171,148 @@ server <- function(input, output, session) {
 
     girafe(ggobj = p)
   })
+  
+  getFilteredData <- reactive({
+    filter(dataWithSpatial, 
+      Year == input$timeline & !is.na(dataWithSpatial$Index))
+  })
 
+  # observe({
+  #   dataWithSpatial <- getFilteredData()
+  #   proxy <- leafletProxy("map_happiness")
+  #   proxy %>% clearMarkers() 
+  #   if (input$clustering) {
+  #       # Enable clustering
+  #       proxy %>% 
+  #         addMarkers(
+  #           clusterOptions = markerClusterOptions(),
+  #           lng = dataWithSpatial$lng,
+  #           lat = dataWithSpatial$lat,
+  #           icon = faceIcons[dataWithSpatial$happiness],
+  #           options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index), # Setting happinessIndex
+  #           popup = paste("Country:", dataWithSpatial$name, "<br>", 
+  #                     "Happiness Score:", dataWithSpatial$Index , "<br>",
+  #                     "Rank:", dataWithSpatial$Rank),
+  #           label = paste(dataWithSpatial$name),
+  #           labelOptions = labelOptions(direction = "top")
+  #         ) 
+  #   } else {
+  #     proxy %>%
+  #       addMarkers(
+  #         lng = dataWithSpatial$lng,
+  #         lat = dataWithSpatial$lat,
+  #         icon = faceIcons[dataWithSpatial$happiness],
+  #         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index), # Setting happinessIndex
+  #         popup = paste("Country:", dataWithSpatial$name, "<br>", 
+  #                   "Happiness Score:", dataWithSpatial$Index , "<br>",
+  #                   "Rank:", dataWithSpatial$Rank),
+  #         label = paste(dataWithSpatial$name),
+  #         labelOptions = labelOptions(direction = "top")
+  #       ) 
+  #   }
+  # })
   output$map_happiness <- renderLeaflet({
-    dataWithSpatial <- dataWithSpatial %>% filter(Year == input$timeline & !is.na(dataWithSpatial$Index))
+    dataWithSpatial <- getFilteredData()
     colors <- colorNumeric("Blues", dataWithSpatial$Index)
     leaflet_map <- leaflet(dataWithSpatial) %>%
       addProviderTiles(providers$CartoDB) %>%
       setView(lng = 0, lat = 0, zoom = 2) %>%
-      setMaxBounds(lng1 = -180, lat1 = -90, lng2 = 180, lat2 = 90) %>%
-      addMarkers(
-        clusterOptions = markerClusterOptions(),
-        lng = dataWithSpatial$lng,
-        lat = dataWithSpatial$lat,
-        icon = ~faceIcons[happiness],
-        options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index), # Setting happinessIndex
-        
-        popup = ~paste("Country:", dataWithSpatial$name, "<br>", "Happiness Score:", dataWithSpatial$Index)
-    
-      ) %>%
+      setMaxBounds(lng1 = -180, lat1 = -90, lng2 = 190, lat2 = 90) %>%
       addPolygons(
-                  fillColor = ~colors(Index),
-                  color = 'white',
-                  smoothFactor = 0.2,
-                  fillOpacity = 0.7,
-                  stroke = F,
-                  weight = 2,
-                  #popup = ~paste("Country:", dataWithSpatial$name, "<br>", "Happiness Score:", dataWithSpatial$Index)
-                  ) %>%
+        fillColor = ~colors(Index),
+        color = 'white',
+        smoothFactor = 0.2,
+        fillOpacity = 0.7,
+        stroke = F,
+        weight = 2,
+        # popup = ~paste("Country:", dataWithSpatial$name, "<br>", "Happiness Score:", dataWithSpatial$Index)
+      ) %>%
       addLegend(
         position = "bottomright",
         pal = colors,
         values = ~dataWithSpatial$Index,
         bins = 14,
-
         title = "Index of Happiness"
-      )
-    leaflet_map %>% onRender("
-      function(el, x) {
-        let happyIcon = L.icon({
-            iconUrl: 'icons/face-smile-regular.svg',
-            iconSize: [24, 24]
-        });
-        console.log(happyIcon)
-        let naturalIcon = L.icon({
-            iconUrl: 'icons/face-meh-regular.svg',
-            iconSize: [24, 24]
-        });
+      ) %>%addMarkers(
+        clusterOptions = markerClusterOptions(),
+        lng = dataWithSpatial$lng,
+        lat = dataWithSpatial$lat,
+        icon = ~faceIcons[happiness],
+        options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index), # Setting happinessIndex
+        popup = ~paste("Country:", dataWithSpatial$name, "<br>", 
+                  "Happiness Score:", dataWithSpatial$Index , "<br>",
+                  "Rank:", dataWithSpatial$Rank),
+        label = ~paste(dataWithSpatial$name),
+        labelOptions = labelOptions(direction = "top")
+      ) 
+      leaflet_map %>% onRender("
+        function(el, x) {
+          // icons
+          let happyIcon = L.icon({
+              iconUrl: 'icons/face-smile-regular.svg',
+              iconSize: [24, 24]
+          });
+          console.log(happyIcon)
+          let naturalIcon = L.icon({
+              iconUrl: 'icons/face-meh-regular.svg',
+              iconSize: [24, 24]
+          });
+          let sadIcon = L.icon({
+              iconUrl: 'icons/face-frown-regular.svg',
+              iconSize: [24, 24]
+          });
+          const getAvgHappiness = (markers) => 
+            (markers.reduce((a, b) => a + parseFloat(b.options.happinessIndex), 0) / markers.length).toFixed(2)
+          let map = this;
+          map.eachLayer(function(layer) {
+            if (layer instanceof L.MarkerClusterGroup) {
+              // create cluster icon
+              layer.options.iconCreateFunction = function(cluster) {
+                const averageHappiness = getAvgHappiness(cluster.getAllChildMarkers());
+                
+                iconHtml = '<div style=\"background: radial-gradient(circle at center, lightskyblue, transparent); width: 40px; height: 40px; border-radius: 50%;\"></div>';
+                
+                if (averageHappiness > 5) {
+                  iconHtml += '<img src=\"icons/face-smile-regular.svg\" style=\"width:24px; height: 24px; position: relative; top: -32px; left: 8px;\" />';
+                } else if (averageHappiness > 3) {
+                  iconHtml += '<img src=\"icons/face-meh-regular.svg\" style=\"width:24px; height: 24px; position: relative; top: -32px; left: 8px;\" />';
+                } else {
+                  iconHtml += '<img src=\"icons/face-frown-regular.svg\" style=\"width:24px; height: 24px; position: relative; top: -32px; left: 8px;\" />';
+                }
 
-        let sadIcon = L.icon({
-            iconUrl: 'icons/face-frown-regular.svg',
-            iconSize: [24, 24]
-        });
-
-        let map = this;
-        map.eachLayer(function(layer) {
-          if (layer instanceof L.MarkerClusterGroup) {
-            layer.options.iconCreateFunction = function(cluster) {
-              let markers = cluster.getAllChildMarkers();
-              let averageHappiness = 0;
-              for (let i = 0; i < markers.length; i++) {
-                averageHappiness += parseFloat(markers[i].options.happinessIndex);
-              }
-              averageHappiness = (averageHappiness / markers.length).toFixed(2);
-              if (averageHappiness > 5) {
-                return happyIcon;
-              } else if (averageHappiness > 3) {
-                return naturalIcon;
+                return L.divIcon({ html: iconHtml, className: 'my-cluster-icon', iconSize: L.point(40, 40) });
+              };
+              // create hover popup
+              layer.on('clustermouseover', function(a) {
+                let cluster = a.layer;
+                const averageHappiness = getAvgHappiness(cluster.getAllChildMarkers());
+                let popup = L.popup()
+                    .setLatLng(cluster.getLatLng())
+                    .setContent(`Average Happiness: ${averageHappiness} for ${cluster.getChildCount()} countries`)
+                    .openOn(map);
+              });
+              layer.on('clustermouseout', function(a) {
+                map.closePopup();
+              });
+            }
+          });
+          map.on('zoomend', function(layer) {
+            var zoomLevel = map.getZoom();
+            if (layer instanceof L.MarkerClusterGroup) {
+              if (zoomLevel > 2.5) {
+                // Enable clustering
+                layer.addTo(map); // Assuming `layer` is your L.MarkerClusterGroup
               } else {
-                return sadIcon;
+                // Disable clustering
+                map.removeLayer(layer);
               }
-            };
-          }
-        });
-      }
-    ")
+            }
+          });
+        }
+      ")
+    
   })
+
 }
 
 # Run the application
