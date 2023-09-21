@@ -9,18 +9,49 @@ library(bslib)
 library(maps)
 library(rnaturalearth)
 library(sf)
+library(lwgeom)
 
-# worldMap <- readOGR("/private/var/folders/rb/k_cp4hm14m30kkkpg55d22g00000gn/T/MicrosoftEdgeDownloads/3209d76e-b490-4d19-a1e6-b117132665b7/ref-countries-2020-60m.shp/CNTR_BN_60M_2020_3035.shp", "CNTR_BN_60M_2020_3035")
-worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+#########
+# ICONS #
+#########
 
-#worldMap <- st_read("../data/countries.geo.json")
+faceIcons <- iconList(
+  happy = makeIcon("../icons/face-smile-regular.svg", "../icons/face-smile-regular.svg", 24, 24),
+  natural = makeIcon("../icons/face-meh-regular.svg", "../icons/face-meh-regular.svg", 24, 24),
+  sad = makeIcon("../icons/face-frown-regular.svg", "../icons/face-frown-regular.svg", 24, 24)
+)
+
+#########
+#  DATA #
+#########
+
+
+# country_coords <- world.cities %>%
+#   group_by(country.etc) %>%
+#   summarise(longitude = mean(long), latitude = mean(lat))
+
+
+#worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+#worldMap <- st_transform(worldMap, 4326)
+
+### Import data
+worldMap <- st_read("../data/countries.geo.json")
 worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappinessIndex2013-2023.csv")
 
 # worldHappiness <- worldHappiness[complete.cases(worldHappiness$Life.Ladder, worldHappiness$Year), ]
 # worldHappiness$Year <- as.numeric(as.character(worldHappiness$Year))
 # worldHappiness$Rank <- ave(worldHappiness$Life.Ladder, worldHappiness$Year, FUN = function(x) rank(-x))
-worldMap <- st_transform(worldMap, 4326)
 
+###### Map data
+# get country centroid coordinates
+dataWithSpatial <- left_join(worldMap, worldHappiness, by = c("name" = "Country"))
+dataWithSpatial$centroid <- st_centroid(dataWithSpatial$geometry)
+dataWithSpatial$lng <- st_coordinates(dataWithSpatial$centroid)[, "X"]
+dataWithSpatial$lat <- st_coordinates(dataWithSpatial$centroid)[, "Y"]
+
+##### Icon data
+# add icon type
+dataWithSpatial$happiness <- ifelse(dataWithSpatial$Index > 5, "happy", ifelse(dataWithSpatial$Index > 3, "natural", "sad"))
 
 
 
@@ -113,13 +144,20 @@ server <- function(input, output, session) {
   })
 
   output$map_happiness <- renderLeaflet({
-    joined_data <- left_join(worldMap, worldHappiness, by = c("name" = "Country"))
-    joined_data <- joined_data %>% filter(Year == input$timeline & !is.na(joined_data$Index))
-
-    colors <- colorNumeric("Blues", joined_data$Index)
-    leaflet(joined_data) %>%
+    dataWithSpatial <- dataWithSpatial %>% filter(Year == input$timeline & !is.na(dataWithSpatial$Index))
+    colors <- colorNumeric("Blues", dataWithSpatial$Index)
+    leaflet(dataWithSpatial) %>%
       addProviderTiles(providers$CartoDB) %>%
       setView(lng = 0, lat = 0, zoom = 2) %>%
+      setMaxBounds(lng1 = -180, lat1 = -90, lng2 = 180, lat2 = 90) %>%
+      addMarkers(
+        #clusterOptions = markerClusterOptions(),
+        lng = dataWithSpatial$lng,
+        lat = dataWithSpatial$lat,
+        icon = ~faceIcons[happiness],
+        popup = ~paste("Country:", dataWithSpatial$name, "<br>", "Happiness Score:", dataWithSpatial$Index)
+    
+      ) %>%
       addPolygons(
                   fillColor = ~colors(Index),
                   color = 'white',
@@ -127,11 +165,12 @@ server <- function(input, output, session) {
                   fillOpacity = 0.7,
                   stroke = F,
                   weight = 2,
-                  popup = ~paste("Country:", joined_data$name, "<br>", "Happiness Score:", joined_data$Index)) %>%
+                  #popup = ~paste("Country:", dataWithSpatial$name, "<br>", "Happiness Score:", dataWithSpatial$Index)
+                  ) %>%
       addLegend(
         position = "bottomright",
         pal = colors,
-        values = ~joined_data$Index,
+        values = ~dataWithSpatial$Index,
         bins = 14,
 
         title = "Index of Happiness"
