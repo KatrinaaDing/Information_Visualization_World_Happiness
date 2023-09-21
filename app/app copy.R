@@ -42,6 +42,13 @@ worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappi
 ### Filter data
 worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$Index))
 
+MIN_INDEX <- min(dataWithSpatial$Index, na.rm = TRUE)
+MAX_INDEX <- max(dataWithSpatial$Index, na.rm = TRUE)
+CLASS <- 3
+STEP <- (MAX_INDEX - MIN_INDEX) / CLASS
+SAD_THREAHSOLD <- MIN_INDEX + STEP
+HAPPY_THRESHOLD <- MAX_INDEX - STEP
+
 # worldHappiness <- worldHappiness[complete.cases(worldHappiness$Life.Ladder, worldHappiness$Year), ]
 # worldHappiness$Year <- as.numeric(as.character(worldHappiness$Year))
 # worldHappiness$Rank <- ave(worldHappiness$Life.Ladder, worldHappiness$Year, FUN = function(x) rank(-x))
@@ -53,9 +60,11 @@ dataWithSpatial$centroid <- st_centroid(dataWithSpatial$geometry)
 dataWithSpatial$lng <- st_coordinates(dataWithSpatial$centroid)[, "X"]
 dataWithSpatial$lat <- st_coordinates(dataWithSpatial$centroid)[, "Y"]
 
+
+
 ##### Icon data
 # add icon type
-dataWithSpatial$happiness <- ifelse(dataWithSpatial$Index > 5, "happy", ifelse(dataWithSpatial$Index > 3, "natural", "sad"))
+dataWithSpatial$happiness <- ifelse(dataWithSpatial$Index > HAPPY_THRESHOLD, "happy", ifelse(dataWithSpatial$Index > SAD_THREAHSOLD, "natural", "sad"))
 
 
 
@@ -95,12 +104,11 @@ map_tab <- tabPanel(
     id = "controls-container",
     sliderInput(
       "timeline",
-      "Select Year",
-      min = 2013,
-      max = 2023,
-      value = 2023,
+      "Select Year<br>sdf",
+      min = 2013, max = 2023, value = 2023,
       step = 1,
-      sep = ""
+      sep = "",
+      animate = TRUE,
     ),
     checkboxInput("clustering", "Enable clustering", value = TRUE)
   ),
@@ -149,9 +157,11 @@ server <- function(input, output, session) {
   #   selected_countries <- intersect(input$country, filtered_data)
   #   updateCheckboxGroupInput(session, 'country', choices = filtered_data, selected = selected_countries)
   # })
-
-  
-
+  observeEvent(input$timeline,{
+    if (input$timeline == 2014) {
+      updateSliderInput(session, "timeline", value = 2015)
+    }
+  })
   output$linePlot <- renderGirafe({
     if (is.null(input$country_select)) {
       # If no data, display a warning
@@ -176,7 +186,6 @@ server <- function(input, output, session) {
     filter(dataWithSpatial, 
       Year == input$timeline & !is.na(dataWithSpatial$Index))
   })
-
   # observe({
   #   dataWithSpatial <- getFilteredData()
   #   proxy <- leafletProxy("map_happiness")
@@ -213,13 +222,17 @@ server <- function(input, output, session) {
   # })
   output$map_happiness <- renderLeaflet({
     dataWithSpatial <- getFilteredData()
+    nrow <- dataWithSpatial %>% nrow()
+    if (nrow == 0) {
+      return(NULL)  # or return a leaflet() object with a message
+    }
     colors <- colorNumeric("Blues", dataWithSpatial$Index)
     leaflet_map <- leaflet(dataWithSpatial) %>%
       addProviderTiles(providers$CartoDB) %>%
       setView(lng = 0, lat = 0, zoom = 2) %>%
       setMaxBounds(lng1 = -180, lat1 = -90, lng2 = 190, lat2 = 90) %>%
       addPolygons(
-        fillColor = ~colors(Index),
+        fillColor = 'lightblue',#~colors(Index),
         color = 'white',
         smoothFactor = 0.2,
         fillOpacity = 0.7,
@@ -234,7 +247,7 @@ server <- function(input, output, session) {
         bins = 14,
         title = "Index of Happiness"
       ) %>%addMarkers(
-        clusterOptions = markerClusterOptions(),
+        # clusterOptions = markerClusterOptions(),
         lng = dataWithSpatial$lng,
         lat = dataWithSpatial$lat,
         icon = ~faceIcons[happiness],
@@ -249,16 +262,16 @@ server <- function(input, output, session) {
         function(el, x) {
           // icons
           let happyIcon = L.icon({
-              iconUrl: 'icons/face-smile-regular.svg',
+              iconUrl: 'www/icons/face-smile-regular.svg',
               iconSize: [24, 24]
           });
           console.log(happyIcon)
           let naturalIcon = L.icon({
-              iconUrl: 'icons/face-meh-regular.svg',
+              iconUrl: 'www/icons/face-meh-regular.svg',
               iconSize: [24, 24]
           });
           let sadIcon = L.icon({
-              iconUrl: 'icons/face-frown-regular.svg',
+              iconUrl: 'www/icons/face-frown-regular.svg',
               iconSize: [24, 24]
           });
           const getAvgHappiness = (markers) => 
@@ -269,16 +282,20 @@ server <- function(input, output, session) {
               // create cluster icon
               layer.options.iconCreateFunction = function(cluster) {
                 const averageHappiness = getAvgHappiness(cluster.getAllChildMarkers());
-                
+
+                // cluster icon background style
                 iconHtml = '<div style=\"background: radial-gradient(circle at center, lightskyblue, transparent); width: 40px; height: 40px; border-radius: 50%;\"></div>';
-                
-                if (averageHappiness > 5) {
-                  iconHtml += '<img src=\"icons/face-smile-regular.svg\" style=\"width:24px; height: 24px; position: relative; top: -32px; left: 8px;\" />';
-                } else if (averageHappiness > 3) {
-                  iconHtml += '<img src=\"icons/face-meh-regular.svg\" style=\"width:24px; height: 24px; position: relative; top: -32px; left: 8px;\" />';
+                // icon style
+                iconStyle = 'style=\"width:24px; height: 24px; position: relative; top: -32px; left: 8px;\"';
+                if (averageHappiness > 5.8476) {
+                  iconHtml += '<img src=\"icons/face-smile-regular.svg\" '+ iconStyle + ' />';
+                } else if (averageHappiness > 3.8533) {
+                  iconHtml += '<img src=\"icons/face-meh-regular.svg\" '+ iconStyle + ' />';
                 } else {
-                  iconHtml += '<img src=\"icons/face-frown-regular.svg\" style=\"width:24px; height: 24px; position: relative; top: -32px; left: 8px;\" />';
+                  iconHtml += '<img src=\"icons/face-frown-regular.svg\" '+ iconStyle + ' />';
                 }
+                // cluster label (num of childern markers)
+                iconHtml += '<div style=\"position: relative; top: -35px; font-size: 12px; text-align: center; font-weight: 700;\">' + cluster.getAllChildMarkers().length + '</div>';
 
                 return L.divIcon({ html: iconHtml, className: 'my-cluster-icon', iconSize: L.point(40, 40) });
               };
