@@ -76,7 +76,7 @@ home_tab <- tabPanel(
     width = 12,
     h2("Introduction"),
     br(),
-    HTML("<p><a href=\"https://www.google.com\">The World Happiness Report</a> is a survey that
+    HTML("<p><a href=\"https://worldhappiness.report/\">The World Happiness Report</a> is a survey that
     evaluates global happiness levels.
     It's gaining more attention as governments and organizations increasingly use its happiness
     metrics for policy decisions. Experts from various fields like economics, psychology, and public
@@ -84,7 +84,7 @@ home_tab <- tabPanel(
     nation's progress. The report reviews current happiness states globally and delves into the
     science behind happiness variations.</p>"),
     HTML("<p>This project aims to explore the World Happiness Report data from <strong>2013 to 2023</strong>
-    (except for 2014 since no report released in this year) with <strong>167</strong> countries. Gathered
+    (except for 2014 since no report published in this year) with <strong>167</strong> countries. Gathered
     data will be visualized in a line chart and a map. The line chart will show the happiness rank
     of selected countries over time. The map will focus on the happiness score of each country in
     the world. </p>"),
@@ -460,7 +460,6 @@ server <- function(input, output, session) {
     count_data <- data %>%
       group_by(happiness = data$happiness) %>%
       summarise(n = n_distinct(name, na.rm = TRUE))
-    print(count_data$happiness)
     p <- ggplot(count_data, aes(x = happiness, y = n)) +
       geom_bar_interactive(aes(fill = happiness, tooltip = paste("Happiness Level:", happiness, "<br>Number of Countries:", n)
       ), stat = "identity", width = 0.8) +
