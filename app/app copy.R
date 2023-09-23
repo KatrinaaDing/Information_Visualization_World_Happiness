@@ -2,14 +2,15 @@ library("shiny")
 library("ggplot2")
 library("leaflet")
 library("ggiraph")
-library(maptools)
-library(rgdal)
-library(dplyr)
-library(bslib)
-library(maps)
-library(rnaturalearth)
-library(sf)
-library(htmlwidgets)
+library("maptools")
+library("rgdal")
+library("dplyr")
+library("bslib")
+library("maps")
+library("rnaturalearth")
+library("sf")
+library("htmlwidgets")
+library("shinydashboard")
 
 
 #########
@@ -32,8 +33,8 @@ faceIcons <- iconList(
 #   summarise(longitude = mean(long), latitude = mean(lat))
 
 
-#worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-#worldMap <- st_transform(worldMap, 4326)
+# worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+# worldMap <- st_transform(worldMap, 4326)
 
 ### Import data
 worldMap <- st_read("../data/countries.geo.json")
@@ -42,12 +43,7 @@ worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappi
 ### Filter data
 worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$Index))
 
-MIN_INDEX <- min(dataWithSpatial$Index, na.rm = TRUE)
-MAX_INDEX <- max(dataWithSpatial$Index, na.rm = TRUE)
-CLASS <- 3
-STEP <- (MAX_INDEX - MIN_INDEX) / CLASS
-SAD_THREAHSOLD <- MIN_INDEX + STEP
-HAPPY_THRESHOLD <- MAX_INDEX - STEP
+
 
 # worldHappiness <- worldHappiness[complete.cases(worldHappiness$Life.Ladder, worldHappiness$Year), ]
 # worldHappiness$Year <- as.numeric(as.character(worldHappiness$Year))
@@ -60,7 +56,12 @@ dataWithSpatial$centroid <- st_centroid(dataWithSpatial$geometry)
 dataWithSpatial$lng <- st_coordinates(dataWithSpatial$centroid)[, "X"]
 dataWithSpatial$lat <- st_coordinates(dataWithSpatial$centroid)[, "Y"]
 
-
+MIN_INDEX <- min(dataWithSpatial$Index, na.rm = TRUE)
+MAX_INDEX <- max(dataWithSpatial$Index, na.rm = TRUE)
+CLASS <- 3
+STEP <- (MAX_INDEX - MIN_INDEX) / CLASS
+SAD_THREAHSOLD <- MIN_INDEX + STEP
+HAPPY_THRESHOLD <- MAX_INDEX - STEP
 
 ##### Icon data
 # add icon type
@@ -93,12 +94,24 @@ map_tab <- tabPanel(
         width: 100%;
         text-align: center;
       }
-      #map_happiness {
-        height: calc(100vh - 100px) !important;
+      .row h2 {
+        text-align: center;
+      }
+      #world_average_index {
+        text-align: center;
+      }
+      #world_average_index_change {
+        text-align: center;
       }
     ")),
   ),
-  leafletOutput("map_happiness", height = "100vh"),
+  fluidRow(
+    h2("Average Happiness Index"),
+    valueBoxOutput("world_average_index", width = 6),
+    valueBoxOutput("world_average_index_change", width = 6)
+  ),
+  br(),
+  leafletOutput("map_happiness", height = "calc(100vh - 160px)"),
   # control panel
   absolutePanel(
     id = "controls-container",
@@ -112,7 +125,6 @@ map_tab <- tabPanel(
     ),
     checkboxInput("clustering", "Enable clustering", value = TRUE)
   ),
-  
 )
 
 rank_tab <- tabPanel(
@@ -157,7 +169,7 @@ server <- function(input, output, session) {
   #   selected_countries <- intersect(input$country, filtered_data)
   #   updateCheckboxGroupInput(session, 'country', choices = filtered_data, selected = selected_countries)
   # })
-  observeEvent(input$timeline,{
+  observeEvent(input$timeline, {
     if (input$timeline == 2014) {
       updateSliderInput(session, "timeline", value = 2015)
     }
@@ -165,7 +177,8 @@ server <- function(input, output, session) {
   output$linePlot <- renderGirafe({
     if (is.null(input$country_select)) {
       # If no data, display a warning
-      return(ggplot() + geom_text(aes(0, 0, label = "No data available for this country")))
+      return(ggplot() +
+        geom_text(aes(0, 0, label = "No data available for this country")))
     }
     filtered_data <- worldHappiness %>% filter(Country %in% input$country_select)
 
@@ -181,30 +194,65 @@ server <- function(input, output, session) {
 
     girafe(ggobj = p)
   })
-  
+
+
+
   getFilteredData <- reactive({
-    filter(dataWithSpatial, 
-      Year == input$timeline & !is.na(dataWithSpatial$Index))
+    filter(
+      dataWithSpatial,
+      Year == input$timeline & !is.na(dataWithSpatial$Index)
+    )
   })
+  getPrevYear <- reactive({
+    prev_year <- ifelse(input$timeline == 2015, 2013, input$timeline - 1)
+    prev_year
+  })
+  getFilteredDataPrevYear <- reactive({
+    filter(
+      dataWithSpatial,
+      Year == getPrevYear() & !is.na(dataWithSpatial$Index)
+    )
+  })
+
+  output$world_average_index <- renderValueBox({
+    average_happiness <- mean(getFilteredData()$Index, na.rm = TRUE)
+    valueBox(
+      format(round(average_happiness, 3), nsmall = 3),
+      paste("Average Happiness Score in ", input$timeline)
+    )
+  })
+
+  output$world_average_index_change <- renderValueBox({
+    average_happiness <- mean(getFilteredData()$Index, na.rm = TRUE)
+    avaerage_happiness_last_year <- mean(getFilteredDataPrevYear()$Index, na.rm = TRUE)
+    change <- ((average_happiness - avaerage_happiness_last_year) / avaerage_happiness_last_year) * 100
+    sign <- ifelse(change > 0, "+", "")
+    formated_change <- paste(sign, format(round(change, 3), nsmall = 3), "%")
+    valueBox(
+      ifelse(input$timeline == 2013, "Data Not Available", formated_change),
+      paste("Change compare to", getPrevYear()),
+    )
+  })
+
   # observe({
   #   dataWithSpatial <- getFilteredData()
   #   proxy <- leafletProxy("map_happiness")
-  #   proxy %>% clearMarkers() 
+  #   proxy %>% clearMarkers()
   #   if (input$clustering) {
   #       # Enable clustering
-  #       proxy %>% 
+  #       proxy %>%
   #         addMarkers(
   #           clusterOptions = markerClusterOptions(),
   #           lng = dataWithSpatial$lng,
   #           lat = dataWithSpatial$lat,
   #           icon = faceIcons[dataWithSpatial$happiness],
   #           options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index), # Setting happinessIndex
-  #           popup = paste("Country:", dataWithSpatial$name, "<br>", 
+  #           popup = paste("Country:", dataWithSpatial$name, "<br>",
   #                     "Happiness Score:", dataWithSpatial$Index , "<br>",
   #                     "Rank:", dataWithSpatial$Rank),
   #           label = paste(dataWithSpatial$name),
   #           labelOptions = labelOptions(direction = "top")
-  #         ) 
+  #         )
   #   } else {
   #     proxy %>%
   #       addMarkers(
@@ -212,19 +260,19 @@ server <- function(input, output, session) {
   #         lat = dataWithSpatial$lat,
   #         icon = faceIcons[dataWithSpatial$happiness],
   #         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index), # Setting happinessIndex
-  #         popup = paste("Country:", dataWithSpatial$name, "<br>", 
+  #         popup = paste("Country:", dataWithSpatial$name, "<br>",
   #                   "Happiness Score:", dataWithSpatial$Index , "<br>",
   #                   "Rank:", dataWithSpatial$Rank),
   #         label = paste(dataWithSpatial$name),
   #         labelOptions = labelOptions(direction = "top")
-  #       ) 
+  #       )
   #   }
   # })
   output$map_happiness <- renderLeaflet({
     dataWithSpatial <- getFilteredData()
     nrow <- dataWithSpatial %>% nrow()
     if (nrow == 0) {
-      return(NULL)  # or return a leaflet() object with a message
+      return(NULL) # or return a leaflet() object with a message
     }
     colors <- colorNumeric("Blues", dataWithSpatial$Index)
     leaflet_map <- leaflet(dataWithSpatial) %>%
@@ -232,8 +280,8 @@ server <- function(input, output, session) {
       setView(lng = 0, lat = 0, zoom = 2) %>%
       setMaxBounds(lng1 = -180, lat1 = -90, lng2 = 190, lat2 = 90) %>%
       addPolygons(
-        fillColor = 'lightblue',#~colors(Index),
-        color = 'white',
+        fillColor = "lightblue", # ~colors(Index),
+        color = "white",
         smoothFactor = 0.2,
         fillOpacity = 0.7,
         stroke = F,
@@ -243,22 +291,25 @@ server <- function(input, output, session) {
       addLegend(
         position = "bottomright",
         pal = colors,
-        values = ~dataWithSpatial$Index,
+        values = ~ dataWithSpatial$Index,
         bins = 14,
         title = "Index of Happiness"
-      ) %>%addMarkers(
+      ) %>%
+      addMarkers(
         # clusterOptions = markerClusterOptions(),
         lng = dataWithSpatial$lng,
         lat = dataWithSpatial$lat,
-        icon = ~faceIcons[happiness],
+        icon = ~ faceIcons[happiness],
         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index), # Setting happinessIndex
-        popup = ~paste("Country:", dataWithSpatial$name, "<br>", 
-                  "Happiness Score:", dataWithSpatial$Index , "<br>",
-                  "Rank:", dataWithSpatial$Rank),
-        label = ~paste(dataWithSpatial$name),
+        popup = ~ paste(
+          "Country:", dataWithSpatial$name, "<br>",
+          "Happiness Score:", dataWithSpatial$Index, "<br>",
+          "Rank:", dataWithSpatial$Rank
+        ),
+        label = ~ paste(dataWithSpatial$name),
         labelOptions = labelOptions(direction = "top")
-      ) 
-      leaflet_map %>% onRender("
+      )
+    leaflet_map %>% onRender("
         function(el, x) {
           // icons
           let happyIcon = L.icon({
@@ -274,7 +325,7 @@ server <- function(input, output, session) {
               iconUrl: 'www/icons/face-frown-regular.svg',
               iconSize: [24, 24]
           });
-          const getAvgHappiness = (markers) => 
+          const getAvgHappiness = (markers) =>
             (markers.reduce((a, b) => a + parseFloat(b.options.happinessIndex), 0) / markers.length).toFixed(2)
           let map = this;
           map.eachLayer(function(layer) {
@@ -327,15 +378,14 @@ server <- function(input, output, session) {
           });
         }
       ")
-    
   })
-
 }
 
 # Run the application
-shinyApp(ui = ui, server = server
-# options = list(
-#   width = 1920,
-#   height = 1080
-# )
+shinyApp(
+  ui = ui, server = server
+  # options = list(
+  #   width = 1920,
+  #   height = 1080
+  # )
 )
