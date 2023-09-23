@@ -54,7 +54,7 @@ ICON_SIZE <- 18
 faceIcons <- iconList(
   very_happy = makeIcon("icons/face-grin-beam-solid.svg", "icons/face-grin-beam-solid.svg", ICON_SIZE, ICON_SIZE),
   happy = makeIcon("icons/face-smile-solid.svg", "icons/face-smile-solid.svg", ICON_SIZE, ICON_SIZE),
-  natural = makeIcon("icons/face-meh-solid.svg", "icons/face-meh-solid.svg", ICON_SIZE, ICON_SIZE),
+  neutral = makeIcon("icons/face-meh-solid.svg", "icons/face-meh-solid.svg", ICON_SIZE, ICON_SIZE),
   sad = makeIcon("icons/face-frown-solid.svg", "icons/face-frown-solid.svg", ICON_SIZE, ICON_SIZE),
   very_sad = makeIcon("icons/face-sad-tear-solid.svg", "icons/face-sad-tear-solid.svg", ICON_SIZE, ICON_SIZE)
 )
@@ -62,7 +62,7 @@ faceIcons <- iconList(
 dataWithSpatial$happiness <- cut(
   dataWithSpatial$Index,
   breaks = c(MIN_INDEX, SAD_THRESHOLD, SAD_THRESHOLD_2, NEUTRAL_THRESHOLD, HAPPY_THRESHOLD, MAX_INDEX),
-  labels = c("very_sad", "sad", "natural", "happy", "very_happy"),
+  labels = c("very_sad", "sad", "neutral", "happy", "very_happy"),
   include.lowest = TRUE
 )
 ##################
@@ -149,12 +149,16 @@ map_tab <- tabPanel(
       #world_average_index_change {
         text-align: center;
       }
+      #country_count {
+        text-align: center;
+      }
     ")),
   ),
   fluidRow(
     h2("World Happiness Score"),
-    valueBoxOutput("world_average_index", width = 6),
-    valueBoxOutput("world_average_index_change", width = 6)
+    valueBoxOutput("country_count", width = 4),
+    valueBoxOutput("world_average_index", width = 4),
+    valueBoxOutput("world_average_index_change", width = 4)
   ),
   leafletOutput("map_happiness", height = "calc(100vh - 220px)"),
   # control panel
@@ -174,8 +178,8 @@ map_tab <- tabPanel(
     checkboxInput("country_name", "Hide country name", value = FALSE),
     pickerInput(
       "happiness_select", "Select Happiness Level:",
-      choices = c("very_happy", "happy", "natural", "sad", "very_sad"),
-      selected = c("very_happy", "happy", "natural", "sad", "very_sad"),
+      choices = c("very_happy", "happy", "neutral", "sad", "very_sad"),
+      selected = c("very_happy", "happy", "neutral", "sad", "very_sad"),
       multiple = TRUE
     ),
     br(),
@@ -247,9 +251,6 @@ server <- function(input, output, session) {
     updateNavbarPage(session, "navbar", "Trends")
   })
 
- 
-
-  
 
   output$linePlot <- renderGirafe({
     if (is.null(input$country_select)) {
@@ -289,17 +290,9 @@ server <- function(input, output, session) {
     leaflet_map <- leaflet(dataWithSpatial) %>%
       addProviderTiles(providers$CartoDB.Positron) %>%
       setView(lng = 80, lat = 0, zoom = 2) %>%
-      # setMaxBounds(lng1 = -160, lat1 = -90, lng2 = 300, lat2 = 90) %>%
-      # addPolygons(
-      #   fillColor = "lightblue", # ~colors(Index),
-      #   color = "white",
-      #   smoothFactor = 0.2,
-      #   fillOpacity = 0.7,
-      #   stroke = F,
-      #   weight = 2,
-      # ) %>%
+      setMaxBounds(lng1 = -160, lat1 = -90, lng2 = 300, lat2 = 90) %>%
       addMarkers(
-        clusterOptions = NULL, # markerClusterOptions(maxClusterRadius = 30),
+        clusterOptions = markerClusterOptions(maxClusterRadius = 20),
         lng = dataWithSpatial$lng,
         lat = dataWithSpatial$lat,
         icon = ~ faceIcons[happiness],
@@ -334,20 +327,10 @@ server <- function(input, output, session) {
     # render custom clustered icons
     leaflet_map %>% onRender("
         function(el, x) {
-          // icons
-          let happyIcon = L.icon({
-              iconUrl: 'www/icons/face-smile-solid.svg',
-              iconSize: [24, 24]
-          });
-          console.log(happyIcon)
-          let naturalIcon = L.icon({
-              iconUrl: 'www/icons/face-meh-solid.svg',
-              iconSize: [24, 24]
-          });
-          let sadIcon = L.icon({
-              iconUrl: 'www/icons/face-frown-solid.svg',
-              iconSize: [24, 24]
-          });
+          const HAPPY_THRESHOLD = 6.6454;
+          const NEUTRAL_THRESHOLD = 5.4488;
+          const SAD_THRESHOLD = 3.0556;
+          const SAD_THRESHOLD_2 = 4.2522;
           const getAvgHappiness = (markers) =>
             (markers.reduce((a, b) => a + parseFloat(b.options.happinessIndex), 0) / markers.length).toFixed(3)
           let map = this;
@@ -361,12 +344,16 @@ server <- function(input, output, session) {
                 iconHtml = '<div style=\"background: radial-gradient(circle at center, transparent, transparent); width: 40px; height: 40px; border-radius: 50%;\"></div>';
                 // icon style
                 iconStyle = 'style=\"width: 24px; height: 24px; position: relative; top: -32px; left: 8px;\"';
-                if (averageHappiness > 5.8476) {
+                if (averageHappiness > HAPPY_THRESHOLD) {
+                  iconHtml += '<img src=\"icons/face-grin-beam-solid.svg\" '+ iconStyle + ' />';
+                } else if (averageHappiness > NEUTRAL_THRESHOLD) {
                   iconHtml += '<img src=\"icons/face-smile-solid.svg\" '+ iconStyle + ' />';
-                } else if (averageHappiness > 3.8533) {
+                } else if (averageHappiness > SAD_THRESHOLD) {
                   iconHtml += '<img src=\"icons/face-meh-solid.svg\" '+ iconStyle + ' />';
-                } else {
+                } else if (averageHappiness > SAD_THRESHOLD_2) {
                   iconHtml += '<img src=\"icons/face-frown-solid.svg\" '+ iconStyle + ' />';
+                } else {
+                  iconHtml += '<img src=\"icons/face-sad-tear-solid.svg\" '+ iconStyle + ' />';
                 }
                 // cluster label (num of childern markers)
                 iconHtml += '<div style=\"position: relative; top: -35px; font-size: 12px; text-align: center; font-weight: 700;\">' + cluster.getAllChildMarkers().length + '</div>';
@@ -460,25 +447,42 @@ server <- function(input, output, session) {
     )
   })
 
+  output$country_count <- renderValueBox({
+    valueBox(
+      nrow(getFilteredData()),
+      paste("Number of Recorded Countries in", input$timeline),
+    )
+  })
+
   output$plot_happiness <- renderGirafe({
     data <- getFilteredData()
-
     # Count the number of unique countries for each happiness level
     count_data <- data %>%
       group_by(happiness = data$happiness) %>%
       summarise(n = n_distinct(name, na.rm = TRUE))
-    
+    print(count_data$happiness)
     p <- ggplot(count_data, aes(x = happiness, y = n)) +
-      geom_bar_interactive(stat = "identity", width = 0.8, fill = "#8f00b6") +
+      geom_bar_interactive(aes(fill = happiness, tooltip = paste("Happiness Level:", happiness, "<br>Number of Countries:", n)
+      ), stat = "identity", width = 0.8) +
+      geom_text(aes(label = n), vjust = -0.5, size = 6) +
+      scale_fill_manual(values = c("very_happy" = "darkgreen",
+        "happy" = "#5b9c4f",
+        "neutral" = "#e6c105",
+        "sad" = "#e67905",
+        "very_sad" = "red")) +
       labs(x = "Happiness Level", y = "Number of Countries") +
       theme(
+        legend.position = "none",
         panel.background = element_blank(),
         panel.grid.major.y = element_line(color = "#e2e2e2"),
-        axis.ticks = element_blank()
+        axis.ticks = element_blank(),
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 18),
+        plot.title = element_text(size = 20),
       ) +
-      ggtitle("Number of Countries by Happiness Level Each Year")
+      ggtitle("Number of Countries by Happiness Level")
 
-    girafe(ggobj = p)
+    girafe(ggobj = p, height_svg = 7)
   })
 }
 
