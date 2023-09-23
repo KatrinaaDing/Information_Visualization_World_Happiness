@@ -178,6 +178,8 @@ map_tab <- tabPanel(
       selected = c("very_happy", "happy", "natural", "sad", "very_sad"),
       multiple = TRUE
     ),
+    br(),
+    girafeOutput("plot_happiness", height = '400px')
   ),
 )
 
@@ -245,7 +247,9 @@ server <- function(input, output, session) {
     updateNavbarPage(session, "navbar", "Trends")
   })
 
+ 
 
+  
 
   output$linePlot <- renderGirafe({
     if (is.null(input$country_select)) {
@@ -454,6 +458,27 @@ server <- function(input, output, session) {
       ifelse(input$timeline == 2013, "Data Not Available", formated_change),
       paste("Change compare to", getPrevYear()),
     )
+  })
+
+  output$plot_happiness <- renderGirafe({
+    data <- getFilteredData()
+
+    # Count the number of unique countries for each happiness level
+    count_data <- data %>%
+      group_by(happiness = data$happiness) %>%
+      summarise(n = n_distinct(name, na.rm = TRUE))
+    
+    p <- ggplot(count_data, aes(x = happiness, y = n)) +
+      geom_bar_interactive(stat = "identity", width = 0.8, fill = "#8f00b6") +
+      labs(x = "Happiness Level", y = "Number of Countries") +
+      theme(
+        panel.background = element_blank(),
+        panel.grid.major.y = element_line(color = "#e2e2e2"),
+        axis.ticks = element_blank()
+      ) +
+      ggtitle("Number of Countries by Happiness Level Each Year")
+
+    girafe(ggobj = p)
   })
 }
 
