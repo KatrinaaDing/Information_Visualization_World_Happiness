@@ -17,11 +17,13 @@ library("shinyWidgets")
 #  DATA #
 #########
 
-worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-worldMap <- st_make_valid(worldMap, 4326)
+#worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+#worldMap <- st_transform(worldMap, 4326)
+#worldMap <- st_make_valid(worldMap)
+#worldMap <- worldMap %>% select(c(name, geometry))
 
 ### Import data
-#worldMap <- st_read("../data/countries.geo.json")
+worldMap <- st_read("../data/countries.geo.json")
 worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappinessIndex2013-2023.csv")
 
 ### Filter data
