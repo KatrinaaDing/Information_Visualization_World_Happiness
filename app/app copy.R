@@ -17,11 +17,11 @@ library("shinyWidgets")
 #  DATA #
 #########
 
-# worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-# worldMap <- st_transform(worldMap, 4326)
+worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+worldMap <- st_make_valid(worldMap, 4326)
 
 ### Import data
-worldMap <- st_read("../data/countries.geo.json")
+#worldMap <- st_read("../data/countries.geo.json")
 worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappinessIndex2013-2023.csv")
 
 ### Filter data
@@ -30,7 +30,7 @@ worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$Index))
 
 ###### Map data
 # get country centroid coordinates
-dataWithSpatial <- left_join(worldMap, worldHappiness, by = c("name" = "Country"))
+dataWithSpatial <- inner_join(worldMap, worldHappiness, by = c("name" = "Country"))
 dataWithSpatial$centroid <- st_centroid(dataWithSpatial$geometry)
 dataWithSpatial$lng <- st_coordinates(dataWithSpatial$centroid)[, "X"]
 dataWithSpatial$lat <- st_coordinates(dataWithSpatial$centroid)[, "Y"]
