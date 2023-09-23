@@ -17,28 +17,28 @@ library("shinyWidgets")
 #  DATA #
 #########
 
-# worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-# worldMap <- st_transform(worldMap, 4326)
+worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+worldMap <- st_make_valid(worldMap, 4326)
 
 ### Import data
-worldMap <- st_read("../data/countries.geo.json")
-worldHappiness <- read.csv("../data/World Happiness Reports 2013-2023/WorldHappinessIndex2013-2023.csv")
+#worldMap <- st_read("../data/countries.geo.json")
+worldHappiness <- read.csv("../data/World Happiness Report 2005-Present.csv")
 
 ### Filter data
-worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$Index))
+worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$'Life.Ladder'))
 
 
 ###### Map data
 # get country centroid coordinates
-dataWithSpatial <- left_join(worldMap, worldHappiness, by = c("name" = "Country"))
+dataWithSpatial <- left_join(worldMap, worldHappiness, by = c("name" = "Country.Name"))
 dataWithSpatial$centroid <- st_centroid(dataWithSpatial$geometry)
 dataWithSpatial$lng <- st_coordinates(dataWithSpatial$centroid)[, "X"]
 dataWithSpatial$lat <- st_coordinates(dataWithSpatial$centroid)[, "Y"]
-N_COUNTRIES <- length(unique(worldHappiness$Country))
+N_COUNTRIES <- length(unique(worldHappiness$'Country.Name'))
 
 # calculate happiness class
-MIN_INDEX <- min(dataWithSpatial$Index, na.rm = TRUE)
-MAX_INDEX <- max(dataWithSpatial$Index, na.rm = TRUE)
+MIN_INDEX <- min(dataWithSpatial$'Life.Ladder', na.rm = TRUE)
+MAX_INDEX <- max(dataWithSpatial$'Life.Ladder', na.rm = TRUE)
 CLASS <- 5
 STEP <- (MAX_INDEX - MIN_INDEX) / CLASS
 SAD_THRESHOLD <- MIN_INDEX + STEP
@@ -60,7 +60,7 @@ faceIcons <- iconList(
 )
 # add icon type
 dataWithSpatial$happiness <- cut(
-  dataWithSpatial$Index,
+  dataWithSpatial$'Life.Ladder',
   breaks = c(MIN_INDEX, SAD_THRESHOLD, SAD_THRESHOLD_2, NEUTRAL_THRESHOLD, HAPPY_THRESHOLD, MAX_INDEX),
   labels = c("very_sad", "sad", "neutral", "happy", "very_happy"),
   include.lowest = TRUE
@@ -108,7 +108,7 @@ rank_tab <- tabPanel(
         checkboxGroupInput(
           "country_select",
           HTML("<h5>Choose a country:</h5>"),
-          choices = sort(unique(worldHappiness$Country)),
+          choices = sort(unique(worldHappiness$'Country.Name')),
           selected = "Australia"
         )
       ),
@@ -208,7 +208,7 @@ server <- function(input, output, session) {
       dataWithSpatial,
       Year == input$timeline &
         happiness %in% input$happiness_select &
-        !is.na(dataWithSpatial$Index)
+        !is.na(dataWithSpatial$'Life.Ladder')
     )
   })
   # get previous year of the selected year
@@ -221,13 +221,13 @@ server <- function(input, output, session) {
   getFilteredDataPrevYear <- reactive({
     filter(
       dataWithSpatial,
-      Year == getPrevYear() & !is.na(dataWithSpatial$Index)
+      Year == getPrevYear() & !is.na(dataWithSpatial$'Life.Ladder')
     )
   })
 
   # get input value from "country_search" text input
   # observeEvent(input$country_search, {
-  #   filtered_data <- sort(unique(worldHappiness$Country))
+  #   filtered_data <- sort(unique(worldHappiness$'Country.Name'))
 
   #   if (input$country_search != "") {
   #     filtered_data <- filtered_data[grepl(input$country_search, filtered_data, ignore.case = TRUE)]
@@ -273,7 +273,7 @@ server <- function(input, output, session) {
       theme(panel.grid.minor.x = element_blank()) +
       scale_x_continuous(breaks = 2013:2023) +
       scale_y_continuous(breaks = seq(0, y_max, by = 10), limits = c(0, y_max)) +
-      scale_color_manual(values = c("World Medium" = "gray", setNames(rainbow(length(unique(filtered_data$Country))), unique(filtered_data$Country)))) +
+      scale_color_manual(values = c("World Medium" = "gray", setNames(rainbow(length(unique(filtered_data$'Country.Name'))), unique(filtered_data$'Country.Name')))) +
       ggtitle("World Happiness Rank of Countries Over Time") +
       xlab("Year") +
       ylab("Rank")
@@ -286,7 +286,7 @@ server <- function(input, output, session) {
     if (nrow == 0) {
       return(NULL)
     }
-    # colors <- colorNumeric("Blues", dataWithSpatial$Index)
+    # colors <- colorNumeric("Blues", dataWithSpatial$'Life.Ladder')
     leaflet_map <- leaflet(dataWithSpatial) %>%
       addProviderTiles(providers$CartoDB.Positron) %>%
       setView(lng = 80, lat = 0, zoom = 2) %>%
@@ -296,10 +296,10 @@ server <- function(input, output, session) {
         lng = dataWithSpatial$lng,
         lat = dataWithSpatial$lat,
         icon = ~ faceIcons[happiness],
-        options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index),
+        options = leaflet::markerOptions(happinessIndex = dataWithSpatial$'Life.Ladder'),
         popup = ~ paste(
           "Country: <strong>", dataWithSpatial$name, "</strong><br>",
-          "Happiness Score:  <strong>", dataWithSpatial$Index, "</strong><br>",
+          "Happiness Score:  <strong>", dataWithSpatial$'Life.Ladder', "</strong><br>",
           "Rank:  <strong>", dataWithSpatial$Rank, "</strong>"
         ),
         label = ~ paste(dataWithSpatial$name),
@@ -400,10 +400,10 @@ server <- function(input, output, session) {
   #         lng = dataWithSpatial$lng,
   #         lat = dataWithSpatial$lat,
   #         icon = faceIcons[dataWithSpatial$happiness],
-  #         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index),
+  #         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$'Life.Ladder'),
   #         popup = paste(
   #           "Country:", dataWithSpatial$name, "<br>",
-  #           "Happiness Score:", dataWithSpatial$Index, "<br>",
+  #           "Happiness Score:", dataWithSpatial$'Life.Ladder', "<br>",
   #           "Rank:", dataWithSpatial$Rank
   #         ),
   #         label = paste(dataWithSpatial$name),
@@ -415,10 +415,10 @@ server <- function(input, output, session) {
   #         lng = dataWithSpatial$lng,
   #         lat = dataWithSpatial$lat,
   #         icon = faceIcons[dataWithSpatial$happiness],
-  #         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$Index),
+  #         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$'Life.Ladder'),
   #         popup = paste(
   #           "Country:", dataWithSpatial$name, "<br>",
-  #           "Happiness Score:", dataWithSpatial$Index, "<br>",
+  #           "Happiness Score:", dataWithSpatial$'Life.Ladder', "<br>",
   #           "Rank:", dataWithSpatial$Rank
   #         ),
   #         label = paste(dataWithSpatial$name),
@@ -428,7 +428,7 @@ server <- function(input, output, session) {
   # })
 
   output$world_average_index <- renderValueBox({
-    average_happiness <- mean(getFilteredData()$Index, na.rm = TRUE)
+    average_happiness <- mean(getFilteredData()$'Life.Ladder', na.rm = TRUE)
     valueBox(
       ifelse(input$timeline == 2014, "Data Not Available", format(round(average_happiness, 3), nsmall = 3)),
       paste("World Average Happiness Score in ", input$timeline)
@@ -436,8 +436,8 @@ server <- function(input, output, session) {
   })
 
   output$world_average_index_change <- renderValueBox({
-    average_happiness <- mean(getFilteredData()$Index, na.rm = TRUE)
-    avaerage_happiness_last_year <- mean(getFilteredDataPrevYear()$Index, na.rm = TRUE)
+    average_happiness <- mean(getFilteredData()$'Life.Ladder', na.rm = TRUE)
+    avaerage_happiness_last_year <- mean(getFilteredDataPrevYear()$'Life.Ladder', na.rm = TRUE)
     change <- ((average_happiness - avaerage_happiness_last_year) / avaerage_happiness_last_year) * 100
     sign <- ifelse(change > 0, "+", "")
     formated_change <- paste(sign, format(round(change, 3), nsmall = 3), "%")
