@@ -12,16 +12,17 @@ library("sf")
 library("htmlwidgets")
 library("shinydashboard")
 library("shinyWidgets")
+library(fmsb)
 
 #########
 #  DATA #
 #########
 
-worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-worldMap <- st_make_valid(worldMap, 4326)
+#worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+#worldMap <- st_make_valid(worldMap, 4326)
 
 ### Import data
-#worldMap <- st_read("../data/countries.geo.json")
+worldMap <- st_read("../data/countries.geo.json")
 worldHappiness <- read.csv("../data/World Happiness Report 2005-Present.csv")
 
 ### Filter data
@@ -55,14 +56,14 @@ faceIcons <- iconList(
   very_happy = makeIcon("icons/face-grin-beam-solid.svg", "icons/face-grin-beam-solid.svg", ICON_SIZE, ICON_SIZE),
   happy = makeIcon("icons/face-smile-solid.svg", "icons/face-smile-solid.svg", ICON_SIZE, ICON_SIZE),
   neutral = makeIcon("icons/face-meh-solid.svg", "icons/face-meh-solid.svg", ICON_SIZE, ICON_SIZE),
-  sad = makeIcon("icons/face-frown-solid.svg", "icons/face-frown-solid.svg", ICON_SIZE, ICON_SIZE),
-  very_sad = makeIcon("icons/face-sad-tear-solid.svg", "icons/face-sad-tear-solid.svg", ICON_SIZE, ICON_SIZE)
+  unhappy = makeIcon("icons/face-frown-solid.svg", "icons/face-frown-solid.svg", ICON_SIZE, ICON_SIZE),
+  very_unhappy = makeIcon("icons/face-sad-tear-solid.svg", "icons/face-sad-tear-solid.svg", ICON_SIZE, ICON_SIZE)
 )
 # add icon type
 dataWithSpatial$happiness <- cut(
   dataWithSpatial$'Life.Ladder',
   breaks = c(MIN_INDEX, SAD_THRESHOLD, SAD_THRESHOLD_2, NEUTRAL_THRESHOLD, HAPPY_THRESHOLD, MAX_INDEX),
-  labels = c("very_sad", "sad", "neutral", "happy", "very_happy"),
+  labels = c("very_unhappy", "unhappy", "neutral", "happy", "very_happy"),
   include.lowest = TRUE
 )
 ##################
@@ -83,8 +84,8 @@ home_tab <- tabPanel(
     policy contribute to the report, explaining how well-being measures can effectively gauge a
     nation's progress. The report reviews current happiness states globally and delves into the
     science behind happiness variations.</p>"),
-    HTML("<p>This project aims to explore the World Happiness Report data from <strong>2013 to 2023</strong>
-    (except for 2014 since no report published in this year) with <strong>167</strong> countries. Gathered
+    HTML("<p>This project aims to explore the World Happiness Report data from <strong>2005 to 2022</strong>
+    with <strong>165</strong> countries. Gathered
     data will be visualized in a line chart and a map. The line chart will show the happiness rank
     of selected countries over time. The map will focus on the happiness score of each country in
     the world. </p>"),
@@ -97,14 +98,23 @@ home_tab <- tabPanel(
 
 rank_tab <- tabPanel(
   title = "Trends",
-  h2("World Happiness Ranks"),
-  p("Compare the happiness ranks of countries over time."),
+  tags$head(
+    tags$style(HTML("
+      .row .col-sm-4 {
+        width: 320px;
+      }
+      #linePlot {
+        width: 100% !important;
+      }
+    ")),
+  ),
+  h2("World Happiness Score Trends"),
+  p("Compare the happiness scores of countries over time."),
   sidebarLayout(
     sidebarPanel(
       # textInput("country_search", "Search for a country:", ""),
-      actionButton("clear_all", "Clear All"),
       div(
-        style = "height: 500px; overflow-y: scroll;",
+        style = "height: 800px; width: 270px; overflow-y: scroll;",
         checkboxGroupInput(
           "country_select",
           HTML("<h5>Choose a country:</h5>"),
@@ -112,9 +122,11 @@ rank_tab <- tabPanel(
           selected = "Australia"
         )
       ),
+      actionButton("clear_all", "Clear All"),
     ),
     mainPanel(
-      girafeOutput("linePlot", height = "600px")
+      girafeOutput("linePlot", height = "600px"),
+      plotOutput("radarPlot")
     )
   )
 )
@@ -155,7 +167,7 @@ map_tab <- tabPanel(
     ")),
   ),
   fluidRow(
-    h2("World Happiness Score"),
+    h2("World Happiness Score Map"),
     valueBoxOutput("country_count", width = 4),
     valueBoxOutput("world_average_index", width = 4),
     valueBoxOutput("world_average_index_change", width = 4)
@@ -167,9 +179,8 @@ map_tab <- tabPanel(
     id = "controls-container",
     sliderInput(
       "timeline",
-      HTML("<span style='font-size: 16px;'>Select Year</span>
-        <span style='font-size: 12px;'>(No data available for 2014)</span>"),
-      min = 2013, max = 2023, value = 2013,
+      "Select Year",
+      min = 2005, max = 2022, value = 2005,
       step = 1,
       sep = "",
       animate = animationOptions(interval = 2000)
@@ -178,15 +189,14 @@ map_tab <- tabPanel(
     checkboxInput("country_name", "Hide country name", value = FALSE),
     pickerInput(
       "happiness_select", "Select Happiness Level:",
-      choices = c("very_happy", "happy", "neutral", "sad", "very_sad"),
-      selected = c("very_happy", "happy", "neutral", "sad", "very_sad"),
+      choices = c("very_happy", "happy", "neutral", "unhappy", "very_unhappy"),
+      selected = c("very_happy", "happy", "neutral", "unhappy", "very_unhappy"),
       multiple = TRUE
     ),
     br(),
-    girafeOutput("plot_happiness", height = '400px')
+    girafeOutput("plot_happiness", height = '400px'),
   ),
 )
-
 
 ui <- navbarPage(
   id = "navbar",
@@ -213,8 +223,7 @@ server <- function(input, output, session) {
   })
   # get previous year of the selected year
   getPrevYear <- reactive({
-    # 2014 has no data so the previous year of 2015 is 2013
-    prev_year <- ifelse(input$timeline == 2015, 2013, input$timeline - 1)
+    prev_year <- input$timeline - 1
     prev_year
   })
   # filter previous-year data based on input$timeline
@@ -236,13 +245,6 @@ server <- function(input, output, session) {
   #   updateCheckboxGroupInput(session, 'country', choices = filtered_data, selected = selected_countries)
   # })
 
-  # since 2014 has no data, if the user selects 2014, we will update the slider to 2015
-  observeEvent(input$timeline, {
-    if (input$timeline == 2014) {
-      updateSliderInput(session, "timeline", value = 2015)
-    }
-  })
-
   observeEvent(input$clear_all, {
     updateCheckboxGroupInput(session, "country_select", selected = character(0))
   })
@@ -259,25 +261,49 @@ server <- function(input, output, session) {
         theme_void()
       return(girafe(ggobj = p))
     }
-    filtered_data <- worldHappiness %>% filter(Country %in% input$country_select)
-    worldRankMedium <- worldHappiness %>%
+    filtered_data <- worldHappiness %>% filter(Country.Name %in% input$country_select)
+    worldScoreAverage <- worldHappiness %>%
       group_by(Year) %>%
-      summarise(Med_rank = median(Rank, na.rm = TRUE))
-    y_max <- ifelse(max(worldRankMedium$Med_rank) > max(filtered_data$Rank), max(worldRankMedium$Med_rank) + 2, max(filtered_data$Rank, na.rm = TRUE))
+      summarise(Avg = ave(Life.Ladder, na.rm = TRUE))
+    y_max <- ifelse(max(worldScoreAverage$Avg) > max(filtered_data$Life.Ladder), max(worldScoreAverage$Avg) + 2, max(filtered_data$Life.Ladder, na.rm = TRUE))
     p <- ggplot() +
-      geom_line_interactive(data = filtered_data, aes(x = Year, y = Rank, group = Country, color = Country)) +
-      geom_point_interactive(data = filtered_data, aes(x = Year, y = Rank, color = Country, tooltip = paste("Country:", Country, "<br>", "Year:", Year, "<br>", "Rank:", Rank)), size = 4) +
-      geom_line_interactive(data = worldRankMedium, aes(x = Year, y = Med_rank, color = "World Medium"), size = 1) +
-      geom_point_interactive(data = worldRankMedium, aes(x = Year, y = Med_rank, color = "World Medium", tooltip = paste("World Medium Rank in ", Year, ":", Med_rank)), size = 4) +
+      geom_line_interactive(data = filtered_data, aes(x = Year, y = Life.Ladder, group = Country.Name, color = Country.Name)) +
+      geom_point_interactive(data = filtered_data, aes(x = Year, y = Life.Ladder, color = Country.Name, tooltip = paste("Country:", Country.Name, "<br>", "Year:", Year, "<br>", "Score:", Life.Ladder)), size = 4) +
+      geom_line_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Medium"), size = 1) +
+      geom_point_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Medium", tooltip = paste("World Medium Rank in ", Year, ":", Avg)), size = 4) +
       theme_minimal() +
       theme(panel.grid.minor.x = element_blank()) +
-      scale_x_continuous(breaks = 2013:2023) +
-      scale_y_continuous(breaks = seq(0, y_max, by = 10), limits = c(0, y_max)) +
+      scale_x_continuous(breaks = 2005:2022) +
+      scale_y_continuous(breaks = seq(0, y_max, by = 1), limits = c(0, y_max)) +
       scale_color_manual(values = c("World Medium" = "gray", setNames(rainbow(length(unique(filtered_data$'Country.Name'))), unique(filtered_data$'Country.Name')))) +
       ggtitle("World Happiness Rank of Countries Over Time") +
       xlab("Year") +
-      ylab("Rank")
-    girafe(ggobj = p)
+      ylab("Happiness Score")
+    girafe(ggobj = p, height_svg = 5, width_svg = 10)
+  })
+
+  output$radarPlot <- renderPlot({
+    filtered_data <- worldHappiness %>% filter(Year==2010 & Country.Name %in% input$country_select)
+    filtered_data <- filtered_data %>% select(c(Social.Support, Freedom.To.Make.Life.Choices, Generosity, Perceptions.Of.Corruption, Positive.Affect, Negative.Affect, Confidence.In.National.Government))
+    colnames(filtered_data) <- gsub("\\.", "\n", colnames(filtered_data))
+    # Add max and min rows for radarchart
+    max_vals <- 1
+    min_vals <- 0
+    filtered_data <- rbind(max_vals, min_vals, filtered_data)
+    radarchart(
+      filtered_data,
+      axistype = 1,
+      pcol = rgb(0.2, 0.5, 0.5, 0.9),
+      pfcol = rgb(0.2, 0.5, 0.5, 0.4),
+      plwd = 4,
+      plty = 1,
+      cglcol = "grey",
+      cglty = 1,
+      axislabcol = "grey",
+      # caxislabels = seq(0, 1, 5),
+      caxislabels =  c(0, 0.2, 0.4, 0.6, 0.8, 1),
+      cglwd = 0.8,
+    )
   })
 
   output$map_happiness <- renderLeaflet({
@@ -309,16 +335,16 @@ server <- function(input, output, session) {
         html = paste0(
           '<div style="padding: 10px; background-color: white;">
               <h5>Happiness Level</h5>
-              <div style="padding: 5px;"><img src="icons/face-grin-beam-solid.svg" width="20" height="20"> <strong>Very High</strong> (',
+              <div style="padding: 5px;"><img src="icons/face-grin-beam-solid.svg" width="20" height="20"> <strong>Very Happy</strong> (',
           format(round(HAPPY_THRESHOLD, 3), nsmall = 3), "-", format(round(MAX_INDEX, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-smile-solid.svg" width="20" height="20"> <strong>High</strong> (',
+              <div style="padding: 5px;"><img src="icons/face-smile-solid.svg" width="20" height="20"> <strong>Happy</strong> (',
           format(round(NEUTRAL_THRESHOLD, 3), nsmall = 3), "-", format(round(HAPPY_THRESHOLD, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-meh-solid.svg" width="20" height="20"> <strong>Medium</strong> (',
-          format(round(SAD_THRESHOLD, 3), nsmall = 3), "-", format(round(NEUTRAL_THRESHOLD, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-frown-solid.svg" width="20" height="20"> <strong>Low</strong> (',
-          format(round(SAD_THRESHOLD_2, 3), nsmall = 3), "-", format(round(SAD_THRESHOLD, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-sad-tear-solid.svg" width="20" height="20"> <strong>Very Low</strong> (',
-          format(round(MIN_INDEX, 3), nsmall = 3), "-", format(round(SAD_THRESHOLD_2, 3), nsmall = 3), ")</div>
+              <div style="padding: 5px;"><img src="icons/face-meh-solid.svg" width="20" height="20"> <strong>Neutral</strong> (',
+          format(round(SAD_THRESHOLD_2, 3), nsmall = 3), "-", format(round(NEUTRAL_THRESHOLD, 3), nsmall = 3), ')</div>
+              <div style="padding: 5px;"><img src="icons/face-frown-solid.svg" width="20" height="20"> <strong>Unhappy</strong> (',
+          format(round(SAD_THRESHOLD, 3), nsmall = 3), "-", format(round(SAD_THRESHOLD_2, 3), nsmall = 3), ')</div>
+              <div style="padding: 5px;"><img src="icons/face-sad-tear-solid.svg" width="20" height="20"> <strong>Very Unhappy</strong> (',
+          format(round(MIN_INDEX, 3), nsmall = 3), "-", format(round(SAD_THRESHOLD, 3), nsmall = 3), ")</div>
             </div>"
         ),
         position = "bottomleft"
@@ -327,10 +353,10 @@ server <- function(input, output, session) {
     # render custom clustered icons
     leaflet_map %>% onRender("
         function(el, x) {
-          const HAPPY_THRESHOLD = 6.6454;
-          const NEUTRAL_THRESHOLD = 5.4488;
-          const SAD_THRESHOLD = 3.0556;
-          const SAD_THRESHOLD_2 = 4.2522;
+          const HAPPY_THRESHOLD = 6.67140162;
+          const NEUTRAL_THRESHOLD = 5.32386899;
+          const SAD_THRESHOLD_2 = 3.97633636;
+          const SAD_THRESHOLD = 2.62880373;
           const getAvgHappiness = (markers) =>
             (markers.reduce((a, b) => a + parseFloat(b.options.happinessIndex), 0) / markers.length).toFixed(3)
           let map = this;
@@ -348,9 +374,9 @@ server <- function(input, output, session) {
                   iconHtml += '<img src=\"icons/face-grin-beam-solid.svg\" '+ iconStyle + ' />';
                 } else if (averageHappiness > NEUTRAL_THRESHOLD) {
                   iconHtml += '<img src=\"icons/face-smile-solid.svg\" '+ iconStyle + ' />';
-                } else if (averageHappiness > SAD_THRESHOLD) {
-                  iconHtml += '<img src=\"icons/face-meh-solid.svg\" '+ iconStyle + ' />';
                 } else if (averageHappiness > SAD_THRESHOLD_2) {
+                  iconHtml += '<img src=\"icons/face-meh-solid.svg\" '+ iconStyle + ' />';
+                } else if (averageHappiness > SAD_THRESHOLD) {
                   iconHtml += '<img src=\"icons/face-frown-solid.svg\" '+ iconStyle + ' />';
                 } else {
                   iconHtml += '<img src=\"icons/face-sad-tear-solid.svg\" '+ iconStyle + ' />';
@@ -430,7 +456,7 @@ server <- function(input, output, session) {
   output$world_average_index <- renderValueBox({
     average_happiness <- mean(getFilteredData()$'Life.Ladder', na.rm = TRUE)
     valueBox(
-      ifelse(input$timeline == 2014, "Data Not Available", format(round(average_happiness, 3), nsmall = 3)),
+      ifelse(is.na(average_happiness), "Data Not Available", format(round(average_happiness, 3))),
       paste("World Average Happiness Score in ", input$timeline)
     )
   })
@@ -442,7 +468,7 @@ server <- function(input, output, session) {
     sign <- ifelse(change > 0, "+", "")
     formated_change <- paste(sign, format(round(change, 3), nsmall = 3), "%")
     valueBox(
-      ifelse(input$timeline == 2013, "Data Not Available", formated_change),
+      ifelse(input$timeline == 2005 | is.na(change), "Data Not Available", formated_change),
       paste("Change compare to", getPrevYear()),
     )
   })
@@ -467,8 +493,8 @@ server <- function(input, output, session) {
       scale_fill_manual(values = c("very_happy" = "darkgreen",
         "happy" = "#5b9c4f",
         "neutral" = "#e6c105",
-        "sad" = "#e67905",
-        "very_sad" = "red")) +
+        "unhappy" = "#e67905",
+        "very_unhappy" = "red")) +
       labs(x = "Happiness Level", y = "Number of Countries") +
       theme(
         legend.position = "none",
@@ -487,9 +513,4 @@ server <- function(input, output, session) {
 
 # Run the application
 shinyApp(
-  ui = ui, server = server
-  # options = list(
-  #   width = 1920,
-  #   height = 1080
-  # )
-)
+  ui = ui, server = server)

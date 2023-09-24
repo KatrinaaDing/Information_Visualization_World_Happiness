@@ -6,6 +6,33 @@ library(fmsb)
 # Library
 library(fmsb)
 
+
+library(ggplot2)
+library(ggiraph)
+
+# Create example data
+data <- data.frame(
+  variable = c("Math", "Science", "English", "History"),
+  value = c(90, 85, 77, 92)
+)
+
+# Add an id for ggiraph
+data$id <- seq_len(nrow(data))
+
+# Create the ggplot2 radar chart
+p <- ggplot(data, aes(x = variable, y = value, group = 1, tooltip = id)) +
+  geom_polygon(fill = "blue", alpha = 0.4) +
+  geom_line(color = "darkblue") +
+  coord_polar()
+
+# Make it interactive with ggiraph
+interactive <- girafe(ggobj = p)
+
+# Print or save the interactive plot
+print(interactive)
+
+
+
 # Create data: note in High school for Jonathan:
 data <- as.data.frame(matrix( sample( 2:20 , 10 , replace=T) , ncol=10))
 colnames(data) <- c("math" , "english" , "biology" , "music" , "R-coding", "data-viz" , "french" , "physic", "statistic", "sport" )
