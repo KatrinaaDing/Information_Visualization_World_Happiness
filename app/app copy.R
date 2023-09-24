@@ -207,12 +207,14 @@ map_tab <- tabPanel(
   ),
 )
 
-data_tab <- tabPanel(
-  title = "Data",
-  h2("Data Source"),
+about_tab <- tabPanel(
+  title = "About",
+  h2("About"),
+  h4("Data Source"),
   HTML("<p>The data used in this project are from <a href='https://www.kaggle.com/datasets/usamabuttar/world-happiness-report-2005-present'>World Happiness Report, 2005-Present</a>.</p>"),
-  br(),
-  
+  h4("Author"),
+  p("This project is created by Ziqi Ding at University of Melbourne."),
+  p("Date: 24 Sep 2023")
 )
 ui <- navbarPage(
   id = "navbar",
@@ -222,7 +224,7 @@ ui <- navbarPage(
   home_tab,
   rank_tab,
   map_tab,
-  data_tab
+  about_tab
 )
 
 ################
