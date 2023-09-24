@@ -18,11 +18,11 @@ library(fmsb)
 #  DATA #
 #########
 
-# worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-# worldMap <- st_make_valid(worldMap, 4326)
+worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+worldMap <- st_make_valid(worldMap, 4326)
 
 ### Import data
-worldMap <- st_read("../data/countries.geo.json")
+# worldMap <- st_read("../data/countries.geo.json")
 worldHappiness <- read.csv("../data/World Happiness Report 2005-Present.csv")
 
 ### Filter data
@@ -192,7 +192,7 @@ map_tab <- tabPanel(
       min = 2005, max = 2022, value = 2005,
       step = 1,
       sep = "",
-      animate = animationOptions(interval = 2000)
+      animate = animationOptions(interval = 3000)
     ),
     checkboxInput("clustering", "Enable clustering", value = TRUE),
     checkboxInput("country_name", "Hide country name", value = FALSE),
@@ -207,13 +207,22 @@ map_tab <- tabPanel(
   ),
 )
 
+data_tab <- tabPanel(
+  title = "Data",
+  h2("Data Source"),
+  HTML("<p>The data used in this project are from <a href='https://www.kaggle.com/datasets/usamabuttar/world-happiness-report-2005-present'>World Happiness Report, 2005-Present</a>.</p>"),
+  br(),
+  
+)
 ui <- navbarPage(
   id = "navbar",
-  title = "World Happiness Report (2013-2023)",
+  title = "World Happiness Report (2005-2022)",
+  # reference: https://bootswatch.com/lumen/
   theme = bslib::bs_theme(bootswatch = "lumen"),
   home_tab,
   rank_tab,
-  map_tab
+  map_tab,
+  data_tab
 )
 
 ################
@@ -273,13 +282,13 @@ server <- function(input, output, session) {
           tooltip = paste("Country:", Country.Name, "<br>", "Year:", Year, "<br>", "Score:", Life.Ladder),
           data_id = paste(Country.Name, Year)),
         size = 3) +
-      geom_line_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Medium"), size = 1) +
-      geom_point_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Medium", tooltip = paste("World Medium Rank in ", Year, ":", Avg)), size = 3) +
+      geom_line_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Average"), size = 1) +
+      geom_point_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Average", tooltip = paste("World Average Score in ", Year, ":", Avg)), size = 3) +
       theme_minimal() +
       theme(panel.grid.minor.x = element_blank(), plot.title = element_text(hjust = 0.5)) +
       scale_x_continuous(breaks = 2005:2022) +
       scale_y_continuous(breaks = seq(0, y_max, by = 1), limits = c(0, y_max)) +
-      scale_color_manual(values = c("World Medium" = "gray", setNames(rainbow(length(unique(filtered_data$"Country.Name"))), unique(filtered_data$"Country.Name")))) +
+      scale_color_manual(values = c("World Average" = "gray", setNames(rainbow(length(unique(filtered_data$"Country.Name"))), unique(filtered_data$"Country.Name")))) +
       ggtitle("World Happiness Scores of Countries Over Time") +
       xlab("Year") +
       ylab("Happiness Score")
@@ -392,7 +401,7 @@ server <- function(input, output, session) {
         popup = ~ paste(
           "Country: <strong>", dataWithSpatial$name, "</strong><br>",
           "Happiness Score:  <strong>", dataWithSpatial$"Life.Ladder", "</strong><br>",
-          "Rank:  <strong>", dataWithSpatial$Rank, "</strong>"
+          "Score:  <strong>", dataWithSpatial$Life.Ladder, "</strong>"
         ),
         label = ~ paste(dataWithSpatial$name),
         labelOptions = labelOptions(direction = "top")
@@ -401,15 +410,15 @@ server <- function(input, output, session) {
         html = paste0(
           '<div style="padding: 10px; background-color: white;">
               <h5>Happiness Level</h5>
-              <div style="padding: 5px;"><img src="icons/face-grin-beam-solid.svg" width="20" height="20"> <strong>Very Happy</strong> (',
+              <div style="padding: 5px;"><img src="icons/face-grin-beam-solid.svg" width="20" height="20"> <strong>Very Happy</strong> (Scored ',
           format(round(HAPPY_THRESHOLD, 3), nsmall = 3), "-", format(round(MAX_INDEX, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-smile-solid.svg" width="20" height="20"> <strong>Happy</strong> (',
+              <div style="padding: 5px;"><img src="icons/face-smile-solid.svg" width="20" height="20"> <strong>Happy</strong> (Scored ',
           format(round(NEUTRAL_THRESHOLD, 3), nsmall = 3), "-", format(round(HAPPY_THRESHOLD, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-meh-solid.svg" width="20" height="20"> <strong>Neutral</strong> (',
+              <div style="padding: 5px;"><img src="icons/face-meh-solid.svg" width="20" height="20"> <strong>Neutral</strong> (Scored ',
           format(round(SAD_THRESHOLD_2, 3), nsmall = 3), "-", format(round(NEUTRAL_THRESHOLD, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-frown-solid.svg" width="20" height="20"> <strong>Unhappy</strong> (',
+              <div style="padding: 5px;"><img src="icons/face-frown-solid.svg" width="20" height="20"> <strong>Unhappy</strong> (Scored ',
           format(round(SAD_THRESHOLD, 3), nsmall = 3), "-", format(round(SAD_THRESHOLD_2, 3), nsmall = 3), ')</div>
-              <div style="padding: 5px;"><img src="icons/face-sad-tear-solid.svg" width="20" height="20"> <strong>Very Unhappy</strong> (',
+              <div style="padding: 5px;"><img src="icons/face-sad-tear-solid.svg" width="20" height="20"> <strong>Very Unhappy</strong> (Scored ',
           format(round(MIN_INDEX, 3), nsmall = 3), "-", format(round(SAD_THRESHOLD, 3), nsmall = 3), ")</div>
             </div>"
         ),
@@ -458,7 +467,7 @@ server <- function(input, output, session) {
                 const averageHappiness = getAvgHappiness(cluster.getAllChildMarkers());
                 let popup = L.popup()
                     .setLatLng(cluster.getLatLng())
-                    .setContent(`${cluster.getChildCount()} countries have average Happiness score of ${averageHappiness}`)
+                    .setContent(`${cluster.getChildCount()} countries have average Happiness Score of ${averageHappiness}`)
                     .openOn(map);
               });
               layer.on('clustermouseout', function(a) {
