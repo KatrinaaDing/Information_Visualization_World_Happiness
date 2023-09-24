@@ -28,8 +28,7 @@ worldHappiness <- read.csv("../data/World Happiness Report 2005-Present.csv")
 ### Filter data
 worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$"Life.Ladder"))
 
-
-###### Map data
+### Map data
 # get country centroid coordinates
 dataWithSpatial <- left_join(worldMap, worldHappiness, by = c("name" = "Country.Name"))
 dataWithSpatial$centroid <- st_centroid(dataWithSpatial$geometry)
@@ -37,6 +36,7 @@ dataWithSpatial$lng <- st_coordinates(dataWithSpatial$centroid)[, "X"]
 dataWithSpatial$lat <- st_coordinates(dataWithSpatial$centroid)[, "Y"]
 N_COUNTRIES <- length(unique(worldHappiness$"Country.Name"))
 
+### Constant
 # calculate happiness class
 MIN_INDEX <- min(dataWithSpatial$"Life.Ladder", na.rm = TRUE)
 MAX_INDEX <- max(dataWithSpatial$"Life.Ladder", na.rm = TRUE)
@@ -59,7 +59,9 @@ faceIcons <- iconList(
   unhappy = makeIcon("icons/face-frown-solid.svg", "icons/face-frown-solid.svg", ICON_SIZE, ICON_SIZE),
   very_unhappy = makeIcon("icons/face-sad-tear-solid.svg", "icons/face-sad-tear-solid.svg", ICON_SIZE, ICON_SIZE)
 )
+
 # add icon type
+# reference: https://www.statology.org/cut-function-in-r/
 dataWithSpatial$happiness <- cut(
   dataWithSpatial$"Life.Ladder",
   breaks = c(MIN_INDEX, SAD_THRESHOLD, SAD_THRESHOLD_2, NEUTRAL_THRESHOLD, HAPPY_THRESHOLD, MAX_INDEX),
@@ -79,7 +81,7 @@ home_tab <- tabPanel(
     h2("Introduction"),
     br(),
     HTML("<p><a href=\"https://worldhappiness.report/\">The World Happiness Report</a> is a survey that
-    evaluates global happiness levels.
+    evaluates global happiness levels, powered by the Gallup World Poll data.
     It's gaining more attention as governments and organizations increasingly use its happiness
     metrics for policy decisions. Experts from various fields like economics, psychology, and public
     policy contribute to the report, explaining how well-being measures can effectively gauge a
@@ -87,6 +89,8 @@ home_tab <- tabPanel(
     science behind happiness variations.</p>"),
     HTML("<p>This project aims to explore the World Happiness Report data from <strong>2005 to 2022</strong>
     with <strong>165</strong> countries. </p>"),
+    HTML("<p>Dataset and fields definitions can be viewed 
+    <a href='https://www.kaggle.com/datasets/usamabuttar/world-happiness-report-2005-present'>here</a>.</p>"),
     br(),
     fluidRow(
       actionButton("start_explore", "Start Explore", class = "btn btn-primary btn-block")
@@ -99,7 +103,7 @@ rank_tab <- tabPanel(
   tags$head(
     tags$style(HTML("
       .row .col-sm-4 {
-        width: 320px;
+        width: 300px;
       }
       #line_plot {
         width: 100% !important;
@@ -117,7 +121,7 @@ rank_tab <- tabPanel(
   sidebarLayout(
     sidebarPanel(
       div(
-        style = "height: 700px; width: 270px; overflow-y: scroll;",
+        style = "height: 700px; width: 250px; overflow-y: scroll;",
         checkboxGroupInput(
           "country_select",
           HTML("<h5>Choose a country:</h5>"),
@@ -194,7 +198,6 @@ map_tab <- tabPanel(
       sep = "",
       animate = animationOptions(interval = 3000)
     ),
-    checkboxInput("clustering", "Enable clustering", value = TRUE),
     checkboxInput("country_name", "Hide country name", value = FALSE),
     pickerInput(
       "happiness_select", "Select Happiness Level:",
@@ -211,7 +214,9 @@ about_tab <- tabPanel(
   title = "About",
   h2("About"),
   h4("Data Source"),
-  HTML("<p>The data used in this project are from <a href='https://www.kaggle.com/datasets/usamabuttar/world-happiness-report-2005-present'>World Happiness Report, 2005-Present</a>.</p>"),
+  HTML("<p>The data used in this project are from 
+  <a href='https://www.kaggle.com/datasets/usamabuttar/world-happiness-report-2005-present'>
+  World Happiness Report, 2005-Present</a>.</p>"),
   h4("Author"),
   p("This project is created by Ziqi Ding at University of Melbourne."),
   p("Date: 24 Sep 2023")
@@ -319,6 +324,7 @@ server <- function(input, output, session) {
     }
     filtered_data <- worldHappiness %>%
       filter(Year == selected_point$year & Country.Name == selected_point$country)
+    # select only the columns that values are between 0 and 1 (same scale)
     filtered_data <- filtered_data %>%
       select(c(
         Social.Support, Freedom.To.Make.Life.Choices, Generosity,
@@ -391,7 +397,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
     leaflet_map <- leaflet(dataWithSpatial) %>%
-      addProviderTiles(providers$CartoDB.Positron) %>%
+      addProviderTiles(ifelse(input$country_name, providers$CartoDB.PositronNoLabels, providers$CartoDB.Positron)) %>%
       setView(lng = 80, lat = 0, zoom = 2) %>%
       setMaxBounds(lng1 = -160, lat1 = -90, lng2 = 300, lat2 = 90) %>%
       addMarkers(
@@ -402,8 +408,7 @@ server <- function(input, output, session) {
         options = leaflet::markerOptions(happinessIndex = dataWithSpatial$"Life.Ladder"),
         popup = ~ paste(
           "Country: <strong>", dataWithSpatial$name, "</strong><br>",
-          "Happiness Score:  <strong>", dataWithSpatial$"Life.Ladder", "</strong><br>",
-          "Score:  <strong>", dataWithSpatial$Life.Ladder, "</strong>"
+          "Happiness Score:  <strong>", dataWithSpatial$"Life.Ladder", "</strong><br>"
         ),
         label = ~ paste(dataWithSpatial$name),
         labelOptions = labelOptions(direction = "top")
