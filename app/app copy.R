@@ -573,6 +573,7 @@ server <- function(input, output, session) {
         panel.background = element_blank(),
         panel.grid.major.y = element_line(color = "#e2e2e2"),
         axis.ticks = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1),
         axis.text = element_text(size = 16),
         axis.title = element_text(size = 18),
         plot.title = element_text(size = 20),
