@@ -18,15 +18,15 @@ library(fmsb)
 #  DATA #
 #########
 
-#worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-#worldMap <- st_make_valid(worldMap, 4326)
+# worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+# worldMap <- st_make_valid(worldMap, 4326)
 
 ### Import data
 worldMap <- st_read("../data/countries.geo.json")
 worldHappiness <- read.csv("../data/World Happiness Report 2005-Present.csv")
 
 ### Filter data
-worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$'Life.Ladder'))
+worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$"Life.Ladder"))
 
 
 ###### Map data
@@ -35,11 +35,11 @@ dataWithSpatial <- left_join(worldMap, worldHappiness, by = c("name" = "Country.
 dataWithSpatial$centroid <- st_centroid(dataWithSpatial$geometry)
 dataWithSpatial$lng <- st_coordinates(dataWithSpatial$centroid)[, "X"]
 dataWithSpatial$lat <- st_coordinates(dataWithSpatial$centroid)[, "Y"]
-N_COUNTRIES <- length(unique(worldHappiness$'Country.Name'))
+N_COUNTRIES <- length(unique(worldHappiness$"Country.Name"))
 
 # calculate happiness class
-MIN_INDEX <- min(dataWithSpatial$'Life.Ladder', na.rm = TRUE)
-MAX_INDEX <- max(dataWithSpatial$'Life.Ladder', na.rm = TRUE)
+MIN_INDEX <- min(dataWithSpatial$"Life.Ladder", na.rm = TRUE)
+MAX_INDEX <- max(dataWithSpatial$"Life.Ladder", na.rm = TRUE)
 CLASS <- 5
 STEP <- (MAX_INDEX - MIN_INDEX) / CLASS
 SAD_THRESHOLD <- MIN_INDEX + STEP
@@ -61,11 +61,12 @@ faceIcons <- iconList(
 )
 # add icon type
 dataWithSpatial$happiness <- cut(
-  dataWithSpatial$'Life.Ladder',
+  dataWithSpatial$"Life.Ladder",
   breaks = c(MIN_INDEX, SAD_THRESHOLD, SAD_THRESHOLD_2, NEUTRAL_THRESHOLD, HAPPY_THRESHOLD, MAX_INDEX),
   labels = c("very_unhappy", "unhappy", "neutral", "happy", "very_happy"),
   include.lowest = TRUE
 )
+
 ##################
 # USER INTERFACE #
 ##################
@@ -85,10 +86,7 @@ home_tab <- tabPanel(
     nation's progress. The report reviews current happiness states globally and delves into the
     science behind happiness variations.</p>"),
     HTML("<p>This project aims to explore the World Happiness Report data from <strong>2005 to 2022</strong>
-    with <strong>165</strong> countries. Gathered
-    data will be visualized in a line chart and a map. The line chart will show the happiness rank
-    of selected countries over time. The map will focus on the happiness score of each country in
-    the world. </p>"),
+    with <strong>165</strong> countries. </p>"),
     br(),
     fluidRow(
       actionButton("start_explore", "Start Explore", class = "btn btn-primary btn-block")
@@ -103,8 +101,14 @@ rank_tab <- tabPanel(
       .row .col-sm-4 {
         width: 320px;
       }
-      #linePlot {
+      #line_plot {
         width: 100% !important;
+      }
+      #statistic {
+        padding-top: 20px;
+      }
+      #statistic_title {
+        margin-bottom: 0px
       }
     ")),
   ),
@@ -112,21 +116,26 @@ rank_tab <- tabPanel(
   p("Compare the happiness scores of countries over time."),
   sidebarLayout(
     sidebarPanel(
-      # textInput("country_search", "Search for a country:", ""),
       div(
-        style = "height: 800px; width: 270px; overflow-y: scroll;",
+        style = "height: 700px; width: 270px; overflow-y: scroll;",
         checkboxGroupInput(
           "country_select",
           HTML("<h5>Choose a country:</h5>"),
-          choices = sort(unique(worldHappiness$'Country.Name')),
+          choices = sort(unique(worldHappiness$"Country.Name")),
           selected = "Australia"
         )
       ),
       actionButton("clear_all", "Clear All"),
     ),
     mainPanel(
-      girafeOutput("linePlot", height = "600px"),
-      plotOutput("radarPlot")
+      fluidRow(
+        column(12, girafeOutput("line_plot", height = "400px", width = "100%"))
+      ),
+      uiOutput("statistic_title"),
+      fluidRow(
+        column(6, plotOutput("radar_plot", height = "450px", width = "100%")),
+        column(6, uiOutput("statistic"))
+      )
     )
   )
 )
@@ -194,7 +203,7 @@ map_tab <- tabPanel(
       multiple = TRUE
     ),
     br(),
-    girafeOutput("plot_happiness", height = '400px'),
+    girafeOutput("plot_happiness", height = "400px"),
   ),
 )
 
@@ -218,7 +227,7 @@ server <- function(input, output, session) {
       dataWithSpatial,
       Year == input$timeline &
         happiness %in% input$happiness_select &
-        !is.na(dataWithSpatial$'Life.Ladder')
+        !is.na(dataWithSpatial$"Life.Ladder")
     )
   })
   # get previous year of the selected year
@@ -230,23 +239,14 @@ server <- function(input, output, session) {
   getFilteredDataPrevYear <- reactive({
     filter(
       dataWithSpatial,
-      Year == getPrevYear() & !is.na(dataWithSpatial$'Life.Ladder')
+      Year == getPrevYear() & !is.na(dataWithSpatial$"Life.Ladder")
     )
   })
 
-  # get input value from "country_search" text input
-  # observeEvent(input$country_search, {
-  #   filtered_data <- sort(unique(worldHappiness$'Country.Name'))
-
-  #   if (input$country_search != "") {
-  #     filtered_data <- filtered_data[grepl(input$country_search, filtered_data, ignore.case = TRUE)]
-  #   }
-  #   selected_countries <- intersect(input$country, filtered_data)
-  #   updateCheckboxGroupInput(session, 'country', choices = filtered_data, selected = selected_countries)
-  # })
-
   observeEvent(input$clear_all, {
     updateCheckboxGroupInput(session, "country_select", selected = character(0))
+    selected_point$year <- NULL
+    selected_point$country <- NULL
   })
 
   observeEvent(input$start_explore, {
@@ -254,7 +254,7 @@ server <- function(input, output, session) {
   })
 
 
-  output$linePlot <- renderGirafe({
+  output$line_plot <- renderGirafe({
     if (is.null(input$country_select)) {
       p <- ggplot() +
         geom_text(aes(x = 0, y = 0, label = "No country selected. Please select a country."), size = 6) +
@@ -264,45 +264,112 @@ server <- function(input, output, session) {
     filtered_data <- worldHappiness %>% filter(Country.Name %in% input$country_select)
     worldScoreAverage <- worldHappiness %>%
       group_by(Year) %>%
-      summarise(Avg = ave(Life.Ladder, na.rm = TRUE))
+      summarise(Avg = mean(Life.Ladder, na.rm = TRUE))
     y_max <- ifelse(max(worldScoreAverage$Avg) > max(filtered_data$Life.Ladder), max(worldScoreAverage$Avg) + 2, max(filtered_data$Life.Ladder, na.rm = TRUE))
     p <- ggplot() +
       geom_line_interactive(data = filtered_data, aes(x = Year, y = Life.Ladder, group = Country.Name, color = Country.Name)) +
-      geom_point_interactive(data = filtered_data, aes(x = Year, y = Life.Ladder, color = Country.Name, tooltip = paste("Country:", Country.Name, "<br>", "Year:", Year, "<br>", "Score:", Life.Ladder)), size = 4) +
+      geom_point_interactive(data = filtered_data,
+        aes(x = Year, y = Life.Ladder, color = Country.Name,
+          tooltip = paste("Country:", Country.Name, "<br>", "Year:", Year, "<br>", "Score:", Life.Ladder),
+          data_id = paste(Country.Name, Year)),
+        size = 3) +
       geom_line_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Medium"), size = 1) +
-      geom_point_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Medium", tooltip = paste("World Medium Rank in ", Year, ":", Avg)), size = 4) +
+      geom_point_interactive(data = worldScoreAverage, aes(x = Year, y = Avg, color = "World Medium", tooltip = paste("World Medium Rank in ", Year, ":", Avg)), size = 3) +
       theme_minimal() +
-      theme(panel.grid.minor.x = element_blank()) +
+      theme(panel.grid.minor.x = element_blank(), plot.title = element_text(hjust = 0.5)) +
       scale_x_continuous(breaks = 2005:2022) +
       scale_y_continuous(breaks = seq(0, y_max, by = 1), limits = c(0, y_max)) +
-      scale_color_manual(values = c("World Medium" = "gray", setNames(rainbow(length(unique(filtered_data$'Country.Name'))), unique(filtered_data$'Country.Name')))) +
-      ggtitle("World Happiness Rank of Countries Over Time") +
+      scale_color_manual(values = c("World Medium" = "gray", setNames(rainbow(length(unique(filtered_data$"Country.Name"))), unique(filtered_data$"Country.Name")))) +
+      ggtitle("World Happiness Scores of Countries Over Time") +
       xlab("Year") +
       ylab("Happiness Score")
-    girafe(ggobj = p, height_svg = 5, width_svg = 10)
+    girafe(ggobj = p, height_svg = 4, width_svg = 10, )
   })
 
-  output$radarPlot <- renderPlot({
-    filtered_data <- worldHappiness %>% filter(Year==2010 & Country.Name %in% input$country_select)
-    filtered_data <- filtered_data %>% select(c(Social.Support, Freedom.To.Make.Life.Choices, Generosity, Perceptions.Of.Corruption, Positive.Affect, Negative.Affect, Confidence.In.National.Government))
-    colnames(filtered_data) <- gsub("\\.", "\n", colnames(filtered_data))
+  # reference: https://stackoverflow.com/questions/39436713/r-shiny-reactivevalues-vs-reactive
+  selected_point <- reactiveValues()
+
+  observeEvent(input$line_plot_selected, {
+    # select only one point at a time
+    # reference: lab 7 solution
+    session$sendCustomMessage(type = "line_plot_set", message = character(0))
+    # reference: https://www.geeksforgeeks.org/strsplit-function-in-r/
+    point_data <- unlist(strsplit(input$line_plot_selected, " "))
+    year <- tail(point_data, 1)
+    country <- paste(head(point_data, -1), collapse = " ")
+    # Extract the year (assuming it's the second element in the vector)
+    selected_point$country <- country
+    selected_point$year <- year
+  })
+
+  output$radar_plot <- renderPlot({
+    if (is.null(selected_point$country)) {
+      return(NULL)
+    }
+    filtered_data <- worldHappiness %>%
+      filter(Year == selected_point$year & Country.Name == selected_point$country)
+    filtered_data <- filtered_data %>%
+      select(c(
+        Social.Support, Freedom.To.Make.Life.Choices, Generosity,
+        Perceptions.Of.Corruption, Positive.Affect, Negative.Affect, Confidence.In.National.Government
+      ))
+    filtered_data_formatted <- filtered_data
+    # wrap column name
+    colnames(filtered_data_formatted) <- gsub("\\.", "\n", colnames(filtered_data))
     # Add max and min rows for radarchart
     max_vals <- 1
     min_vals <- 0
-    filtered_data <- rbind(max_vals, min_vals, filtered_data)
+    plot_color <- rgb(0.2, 0.5, 0.5, 0.9)
+    filtered_data_formatted <- rbind(max_vals, min_vals, filtered_data_formatted)
     radarchart(
-      filtered_data,
+      filtered_data_formatted,
       axistype = 1,
-      pcol = rgb(0.2, 0.5, 0.5, 0.9),
+      pcol = plot_color,
       pfcol = rgb(0.2, 0.5, 0.5, 0.4),
       plwd = 4,
       plty = 1,
       cglcol = "grey",
       cglty = 1,
       axislabcol = "grey",
-      # caxislabels = seq(0, 1, 5),
-      caxislabels =  c(0, 0.2, 0.4, 0.6, 0.8, 1),
+      caxislabels = c(-0.2, 0, 0.2, 0.4, 0.6, 0.8, 1),
       cglwd = 0.8,
+    )
+  })
+  # reference: https://rstudio.github.io/shiny/reference/renderUI.html
+  output$statistic_title <- renderUI({
+    if (is.null(selected_point$country)) {
+      return(HTML("<h5 style='text-align: center; padding-top: 5px; margin-right: 100px;'>Select a point to view statistic</h5>"))
+    }
+    print(selected_point)
+    HTML(paste0(
+      "<h5 style='text-align: center; padding-top: 10px; margin-right: 100px;'>Statistic for ",
+      selected_point$country, " in ", selected_point$year, "</h5>",
+      "<p style='text-align: center; font-size: 12px; margin-right: 100px;'>
+      Except for \"Negative Affect\", where a lower score is better, higher scores are better in all other dimensions.</p>"
+    ))
+  })
+
+  output$statistic <- renderUI({
+    if (is.null(selected_point$country)) {
+      return(NULL)
+    }
+    filtered_data <- worldHappiness %>%
+      filter(Year == selected_point$year & Country.Name == selected_point$country)
+    HTML(
+      paste0("
+        <lu>
+          <li> Log GDP Per Capita: <strong>", filtered_data$Log.GDP.Per.Capita, "</strong></li>
+          <li> Healthy Life Expectancy At Birth: <strong>", filtered_data$Healthy.Life.Expectancy.At.Birth, "</strong></li>
+          <br>
+          <li> Confidence In National Government: <strong>", filtered_data$Confidence.In.National.Government, "</strong></li>
+          <li> Freedom To Make Life Choices: <strong>", filtered_data$Freedom.To.Make.Life.Choices, "</strong></li>
+          <li> Generosity: <strong>", filtered_data$Generosity, "</strong></li>
+          <li> Negative Affect: <strong>", filtered_data$Negative.Affect, "</strong></li>
+          <li> Perceptions Of Corruption: <strong>", filtered_data$Perceptions.Of.Corruption, "</strong></li>
+          <li> Positive Affect: <strong>", filtered_data$Positive.Affect, "</strong></li>
+          <li> Social Support: <strong>", filtered_data$Social.Support, "</strong></li>
+        </lu>
+      ")
     )
   })
 
@@ -312,7 +379,6 @@ server <- function(input, output, session) {
     if (nrow == 0) {
       return(NULL)
     }
-    # colors <- colorNumeric("Blues", dataWithSpatial$'Life.Ladder')
     leaflet_map <- leaflet(dataWithSpatial) %>%
       addProviderTiles(providers$CartoDB.Positron) %>%
       setView(lng = 80, lat = 0, zoom = 2) %>%
@@ -322,10 +388,10 @@ server <- function(input, output, session) {
         lng = dataWithSpatial$lng,
         lat = dataWithSpatial$lat,
         icon = ~ faceIcons[happiness],
-        options = leaflet::markerOptions(happinessIndex = dataWithSpatial$'Life.Ladder'),
+        options = leaflet::markerOptions(happinessIndex = dataWithSpatial$"Life.Ladder"),
         popup = ~ paste(
           "Country: <strong>", dataWithSpatial$name, "</strong><br>",
-          "Happiness Score:  <strong>", dataWithSpatial$'Life.Ladder', "</strong><br>",
+          "Happiness Score:  <strong>", dataWithSpatial$"Life.Ladder", "</strong><br>",
           "Rank:  <strong>", dataWithSpatial$Rank, "</strong>"
         ),
         label = ~ paste(dataWithSpatial$name),
@@ -454,7 +520,7 @@ server <- function(input, output, session) {
   # })
 
   output$world_average_index <- renderValueBox({
-    average_happiness <- mean(getFilteredData()$'Life.Ladder', na.rm = TRUE)
+    average_happiness <- mean(getFilteredData()$"Life.Ladder", na.rm = TRUE)
     valueBox(
       ifelse(is.na(average_happiness), "Data Not Available", format(round(average_happiness, 3))),
       paste("World Average Happiness Score in ", input$timeline)
@@ -462,8 +528,8 @@ server <- function(input, output, session) {
   })
 
   output$world_average_index_change <- renderValueBox({
-    average_happiness <- mean(getFilteredData()$'Life.Ladder', na.rm = TRUE)
-    avaerage_happiness_last_year <- mean(getFilteredDataPrevYear()$'Life.Ladder', na.rm = TRUE)
+    average_happiness <- mean(getFilteredData()$"Life.Ladder", na.rm = TRUE)
+    avaerage_happiness_last_year <- mean(getFilteredDataPrevYear()$"Life.Ladder", na.rm = TRUE)
     change <- ((average_happiness - avaerage_happiness_last_year) / avaerage_happiness_last_year) * 100
     sign <- ifelse(change > 0, "+", "")
     formated_change <- paste(sign, format(round(change, 3), nsmall = 3), "%")
@@ -487,14 +553,15 @@ server <- function(input, output, session) {
       group_by(happiness = data$happiness) %>%
       summarise(n = n_distinct(name, na.rm = TRUE))
     p <- ggplot(count_data, aes(x = happiness, y = n)) +
-      geom_bar_interactive(aes(fill = happiness, tooltip = paste("Happiness Level:", happiness, "<br>Number of Countries:", n)
-      ), stat = "identity", width = 0.8) +
+      geom_bar_interactive(aes(fill = happiness, tooltip = paste("Happiness Level:", happiness, "<br>Number of Countries:", n)), stat = "identity", width = 0.8) +
       geom_text(aes(label = n), vjust = -0.5, size = 6) +
-      scale_fill_manual(values = c("very_happy" = "darkgreen",
+      scale_fill_manual(values = c(
+        "very_happy" = "darkgreen",
         "happy" = "#5b9c4f",
         "neutral" = "#e6c105",
         "unhappy" = "#e67905",
-        "very_unhappy" = "red")) +
+        "very_unhappy" = "red"
+      )) +
       labs(x = "Happiness Level", y = "Number of Countries") +
       theme(
         legend.position = "none",
@@ -513,4 +580,5 @@ server <- function(input, output, session) {
 
 # Run the application
 shinyApp(
-  ui = ui, server = server)
+  ui = ui, server = server
+)
