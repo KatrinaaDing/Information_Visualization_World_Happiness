@@ -3,11 +3,18 @@ library("ggplot2")
 library("leaflet")
 library("ggiraph")
 library("maptools")
-library("rgdal")
 library("dplyr")
 library("bslib")
 library("maps")
-library("rnaturalearth")
+# library("rnaturalearth")
+# ^This package is too old and cannot be installed at runtime.
+# what to do:
+# in console execute this then redeploy:
+# > library(rnaturalearth)
+# > library(sf)
+# > worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+# > worldMap <- st_make_valid(worldMap)
+# > saveRDS(worldMap, "app/worldMap.rds")
 library("sf")
 library("htmlwidgets")
 library("shinydashboard")
@@ -26,8 +33,11 @@ worldHappiness <- read.csv("World Happiness Report 2005-Present.csv")
 worldHappiness <- worldHappiness %>% filter(!is.na(worldHappiness$"Life.Ladder"))
 
 ### Map data
-worldMap <- ne_countries(scale = "medium", returnclass = "sf")
-worldMap <- st_make_valid(worldMap, 4326)
+# worldMap <- ne_countries(scale = "medium", returnclass = "sf")
+# worldMap <- st_make_valid(worldMap, 4326)
+# ^ This was from rnaturalearth which cannot be installed at runtime.
+# So I pre-saved the data frame as an RDS file and load it here.
+worldMap <- readRDS("worldMap.rds")
 # get country centroid coordinates
 dataWithSpatial <- left_join(worldMap, worldHappiness, by = c("name" = "Country.Name"))
 # reference: https://stackoverflow.com/questions/71412807/how-to-calculate-the-centroid-of-a-polygon-shape-file-in-r
